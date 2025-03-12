@@ -1,0 +1,57 @@
+/* =======================
+   Global / Body
+========================== */
+html, body
+{
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* No scrollbars */
+  box-sizing: border-box;
+}
+
+/* =======================
+   Default div styles (for debugging)
+========================== */
+div
+{
+  border: 0.5px solid rgba(0, 0, 255, 0.25); /* Thin blue semitransparent */
+  box-sizing: border-box; /* Include padding & border in size */
+  padding: .1in;
+}
+
+#root
+{
+  height: 100%;
+}
+
+.VBox
+{
+  display: flex;
+  flex-direction: column; /* Stack children vertically */
+  width: 100%; /* Stretch to fill parent's width */
+  flex-grow: 1;
+  row-gap: .1in;
+}
+
+.HBox
+{
+  display: flex;
+  flex-direction: row; /* Stack children horizontally */
+  height: 100%; /* Stretch to fill parent's height */
+  flex-grow: 1;
+  column-gap: .1in;
+}
+
+.VBox > *
+{
+  flex-shrink: 1;
+  flex-basis: 0;
+}
+
+.HBox > *
+{
+  flex-shrink: 1;
+  flex-basis: 0;
+}
