@@ -6,12 +6,10 @@ declare namespace h.JSX {
 
 
 // Our custom hyperscript function.
-// It builds a nested dictionary whose keys are constructed as tag+id (if id is provided).
+// It builds a nested dictionary of components and their properties.
 function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
 {
   //console.log(`\nh: tag=${sTag}, dctProps=${JSON.stringify(dctProps)}, arrChildren=${JSON.stringify(arrChildren)}`);
-
-  // The JSX tag is the component name and becomes the key in the dictionary.
 
   // Process children into an object.
   let dctChildObject: { [key: string]: any } = {};
@@ -23,16 +21,17 @@ function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
     dctChildObject[sChildKey] = child[sChildKey];
   };
 
-  // A collection element with childTag has only one adaptor child.
+  // A collection element with childTag has only one template child.
   if(dctProps?.trait == 'list')
   {
-    dctProps['adaptor'] = Object.values(arrChildren[0])[0];
+    dctProps.template = Object.values(arrChildren[0])[0];
   }
   else
   {
     // Iterate over children.
     for(const child of arrChildren)
     {
+      // Recursively process children arrays
       if(Array.isArray(child))
         child.forEach(processChild);
       else
@@ -40,7 +39,7 @@ function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
     }
   }
 
-  // Merge remaining props with the children object after removing id
+  // Merge remaining props with the children object
   return {[sTag]: {...dctProps, ...dctChildObject}};
 }
 

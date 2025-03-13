@@ -1,8 +1,4 @@
-/**
- * Recursively creates DOM nodes from the data dictionary.
- * @param data - The dictionary representing the component tree.
- * @param container - The existing DOM node to append the elements to.
- */
+import type { Dict, ComponentMap} from './cirkit-types';
 
 import {emit} from './cirkit-junction.js';
 
@@ -11,25 +7,36 @@ const DOMAttrMap: any =
   'input': ['placeholder'],
 };
 
+// These are special properties that are objects and should not be treated as children
+const SpecialAttr = ['template', 'ref', 'style', 'select'];
 
-function plantDOMTree(dct: any, elemSite: HTMLElement): void
+function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement): void
 {
   for(const sKey in dct)
   {
-    const dctProps = dct[sKey];
-    let tagName = dctProps.tag || 'div';
+    const dctProps: Dict = dct[sKey];
+    let tagName: string = dctProps.tag || 'div';
     let element: HTMLElement;
     element = document.createElement(tagName);
 
     if(dctProps.kind) element.className = dctProps?.kind;
-    if(dctProps.span) element.style.flexGrow = String(parseFloat(dctProps.span));
+    if(dctProps.span != null) element.style.flexGrow = String(dctProps.span);
     if(dctProps.text) element.innerText = dctProps.text;
+    if(dctProps.style)
+    {
+      for(const [prop, value] of Object.entries(dctProps.style))
+      {
+        element.style.setProperty(prop, value as string);
+      }
+    }
 
     // Recursively process children
     for(const prop in dctProps)
     {
       const child: any = dctProps[prop];
-      if(typeof child === "object" && prop !== "adaptor")
+
+      // If the child is an object, and not a special property, then it is a child component
+      if(typeof child === "object" && !SpecialAttr.includes(prop))
       {
         if(Array.isArray(child))
           child.forEach(item => plantDOMTree({[prop]: item}, element));
@@ -47,63 +54,17 @@ function plantDOMTree(dct: any, elemSite: HTMLElement): void
   }
 }
 
-
-function exposeEventSignal(app: any, path: string, evt: string)
+function exposeEventSignal(app: ComponentMap, path: string, evt: string)
 {
   // Drill down the path like a.b.c.d
-  const arrPath = path.split('.');
-  let comp = app;
-  for(const sKey of arrPath)
-  {
-    comp = comp[sKey];
-  }
-
+  const arrPath: string[] = path.split('.');
+  let comp: ComponentMap = app;
+  for(const sKey of arrPath) comp = comp[sKey];
   comp.ref.addEventListener(evt, (e: any) => emit(path + '.' + evt, e));
 }
-
 
 const setProp = (prop: string) => (elem: any, value: any) => elem[prop] = value;
 const setStyle = (prop: string) => (elem: any, value: any) => elem.style[prop] = value;
 const setAttr = (attr: string) => (elem: any, value: any) => elem.setAttribute(attr, value);
 
 export {plantDOMTree, exposeEventSignal, setAttr, setProp, setStyle};
-
-
-const dctTest = {
-  "main": {
-    "kind": "VBox",
-    "todoList": {
-      "tag": "ul",
-      "span": 20,
-      "childKind": {
-        "tag": "li",
-        "text": "",
-        "color": "",
-      },
-      "Items": [],
-    },
-    "todoAdd": {
-      "kind": "HBox",
-      "span": 1,
-      "todoText": {
-        "tag": "input",
-        "placeholder": "Enter item to add",
-        "span": 9,
-      },
-      "buttonAdd": {
-        "tag": "button",
-        "text": "Add Item",
-        "span": 1,
-      },
-    },
-    "colors": {
-      "kind": "HBox",
-      "span": 1,
-      "childKind": {
-        "tag": "button",
-        "rgb": "",
-      },
-      "Items": [],
-    },
-  },
-};
