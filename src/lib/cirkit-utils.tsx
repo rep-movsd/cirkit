@@ -1,5 +1,6 @@
 import {emit, wire, Slot} from './cirkit-junction.js';
 import {plantDOMTree} from './cirkit-dom.js';
+import type {IndexedItem} from './cirkit-types.js'
 
 function addToDictArray(dct: any, key: string, item: any)
 {
@@ -9,7 +10,8 @@ function addToDictArray(dct: any, key: string, item: any)
 
 function addSlot(comp:any, name: string, func: any)
 {
-  comp[name] = func.bind(comp);
+  if(!comp.slots) comp.slots = {};
+  comp.slots[name] = func.bind(comp);
 }
 
 class List<T>
@@ -32,7 +34,8 @@ class List<T>
   public add(item: T): void
   {
     this._data.push(item);
-    emit(`${this._name}.add`, item);
+    const ii: IndexedItem = {item, index: this._data.length - 1};
+    emit(`${this._name}.add`, ii);
   }
 
   public set(index: number, item: T): void
@@ -85,31 +88,32 @@ function connectList(comp: any, list: List<any>)
     return refs;
   }
 
-  const setData = (data:any, elem:any) =>
+  const setData = (data: IndexedItem, elem:any) =>
   {
     // Set each property via the adaptor functions
-    for(const key of Object.keys(data))
+    for(const key of Object.keys(data.item))
     {
       const setter = template[key];
-      setter(elem, data[key]);
+      setter(elem.refs, data.item[key], data.index);
     }
   }
 
-  const addElem = (_: any, data: any) =>
+  const addElem = (_: any, data: IndexedItem) =>
   {
     // Get the template and make the DOM element, set all properties, add to the parent, save ref
     const elem = document.createElement(template.tag);
-    setData(data, elem);
     comp.ref.appendChild(elem);
-    addToDictArray(comp, 'refs', {ref: elem});
+    addToDictArray(comp, 'refs', elem);
+    setData(data, comp);
   }
 
-  const addComp = (_: any, data: any) =>
+  const addComp = (_: any, data: IndexedItem) =>
   {
     // Plant the dom subtree, then save the refs of all children in a tree
     plantDOMTree({...template.tag}, comp.ref);
     const childRefs = getChildRefs(template.tag);
     addToDictArray(comp, 'refs', childRefs);
+    setData(data, comp);
   }
 
   const delElem = (_: any, index: number) =>

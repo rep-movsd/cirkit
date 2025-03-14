@@ -38,11 +38,13 @@ function handleProps(dctProps: Dict, element: HTMLElement, path: string)
     }
   }
 
+  dctProps.ref = element;
+
   exposeEvtSignals(dctProps, element, path);
 }
 
 
-function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = ''): void
+function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = ''): ComponentMap
 {
   for(const sKey in dct)
   {
@@ -52,7 +54,10 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '
     element = document.createElement(tagName);
 
     // Save the path
-    path = path ? path + '.' + sKey : sKey;
+    path = path ? (elemSite.dataset.path + '.' + sKey) : sKey;
+    element.dataset.path = path;
+
+    console.log(element, path);
 
     handleProps(dctProps, element, path);
 
@@ -75,17 +80,22 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '
       }
     }
 
-    element.dataset.path = path;
-    dctProps.ref = element;
     elemSite.appendChild(element);
   }
+
+  // Return the first element of the tree (used to save the top level element as the application object)
+  return dct[Object.keys(dct)[0]];
 }
 
 
-const setProp = (prop: string) => (elem: any, value: any) => elem[prop] = value;
-const setStyle = (prop: string) => (elem: any, value: any) => elem.style[prop] = value;
-const setAttr = (attr: string) => (elem: any, value: any) => elem.setAttribute(attr, value);
+const setProp = (prop: string) =>
+  (refs: any[], value: any, index: number) => refs[index][prop] = value;
 
+const setStyle = (prop: string) =>
+  (refs: any[], value: any, index: number) => refs[index].style[prop] = value;
+
+const setAttr = (attr: string) =>
+  (refs: any[], value: any, index: number) => refs[index].setAttribute(attr, value);
 
 
 export {plantDOMTree, exposeEvtSignals, setAttr, setProp, setStyle};

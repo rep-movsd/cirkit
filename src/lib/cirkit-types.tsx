@@ -2,11 +2,11 @@
 type ComponentTrait = 'list'|'set';
 
 type Dict = { [key: string]: any };
-type ComponentBase = Dict & { span?: number; };
+type ComponentBase = Dict & { span?: number; data?: Dict };
 type ComponentTagged = ComponentBase & { tag: string; kind?: never; };
 type ComponentTemplate = ComponentTagged;
 
-type Component = ComponentBase & { kind: string; tag?: never; };
+type Component = ComponentBase | ComponentBase & { kind: string; tag?: never; };
 type CollectionComponent = Component & { trait: ComponentTrait, template: Component, }
 type ComponentMap = { [key: string]: Component | ComponentTagged | CollectionComponent };
 
@@ -15,4 +15,4 @@ type CollectionComponentSelector = (element: Component, selected: boolean) => vo
 
 type IndexedItem = { index: number, item: any };
 
-export { Dict, ComponentMap, ComponentBase, ComponentTagged, Component, CollectionComponent, ComponentTemplate};
+export { Dict, ComponentMap, ComponentBase, ComponentTagged, Component, CollectionComponent, ComponentTemplate, IndexedItem};

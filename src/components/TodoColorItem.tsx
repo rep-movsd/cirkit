@@ -8,7 +8,7 @@ export const TodoColorItemTemplate: ComponentTemplate = {
     <boxColor tag='div' span={1} />
   </box>,
 
-  color: (refs: any, value: any) => { refs.box.boxColor.ref.style.backgroundColor = value; },
+  color: (refs: any, value: any, index: number) => { refs[index].box.boxColor.ref.style.backgroundColor = value; },
 
   signals: ['click'],
 };

@@ -1,12 +1,14 @@
 import type {ComponentMap} from '../lib/cirkit-types.js';
 import {h} from '../lib/cirkit-jsx.js';
 import {plantDOMTree} from '../lib/cirkit-dom.js';
+import {data} from '../model.js';
 
 import {TodoItemTemplate} from './TodoItem.js';
 import {TodoColorItemTemplate} from './TodoColorItem.js';
 
-export const App: ComponentMap = (
-  <main kind='VBox'>
+// Ideally we always start with a top level component called app
+const root: ComponentMap = (
+  <app kind='VBox app'>
 
     <todoList trait='list' tag='ul' span={20}>
       {{TodoItemTemplate}}
@@ -21,7 +23,10 @@ export const App: ComponentMap = (
       {{TodoColorItemTemplate}}
     </colors>
 
-  </main>
+  </app>
 );
 
-plantDOMTree(App, document.getElementById('root')!);
+
+export const app = plantDOMTree(root, document.body);
+
+app.data = data;
