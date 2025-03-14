@@ -86,4 +86,6 @@ const setProp = (prop: string) => (elem: any, value: any) => elem[prop] = value;
 const setStyle = (prop: string) => (elem: any, value: any) => elem.style[prop] = value;
 const setAttr = (attr: string) => (elem: any, value: any) => elem.setAttribute(attr, value);
 
+
+
 export {plantDOMTree, exposeEvtSignals, setAttr, setProp, setStyle};
