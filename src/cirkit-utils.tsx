@@ -1,17 +1,22 @@
 import {emit, wire, Slot} from './cirkit-junction.js';
 import {plantDOMTree} from './cirkit-dom.js';
 
+function addToDictArray(dct: any, key: string, item: any)
+{
+  if(!dct[key]) dct[key] = [];
+  dct[key].push(item);
+}
 
 function addSlot(comp:any, name: string, func: any)
 {
   comp[name] = func.bind(comp);
 }
 
-
 class List<T>
 {
   private _data: T[] = [];
   private readonly _name: string;
+  private _selected: number = -1;
 
   constructor(name: string)
   {
@@ -21,6 +26,8 @@ class List<T>
   get name(): string {return this._name;}
 
   get items(): T[] {return this._data;}
+
+  get selected(): number {return this._selected;}
 
   public add(item: T): void
   {
@@ -39,6 +46,21 @@ class List<T>
     this._data.splice(index, 1);
     emit(`${this._name}.del`, index);
   }
+
+  // Single select
+  select(index: number): void
+  {
+    if(this._selected !== index)
+    {
+      // Emit a signal to deselect the current selection
+      if(this._selected >= 0)
+        emit(`${this._name}.sel`, -1);
+
+      // Emit a signal to select the new item
+      this._selected = index;
+        emit(`${this._name}.sel`, index);
+    }
+  }
 }
 
 
@@ -49,26 +71,6 @@ function connectList(comp: any, list: List<any>)
 
   // Components have tag as a JSX parsed Object
   const isComp = typeof template.tag == 'object';
-
-  const setData = (data:any, elem:any) =>
-  {
-    // Set each property via the adaptor functions
-    for(const key of Object.keys(data))
-    {
-      const setter = template[key];
-      setter(elem, data[key]);
-    }
-  }
-
-  const addElem = (_: any, data: any) =>
-  {
-    // Get the adaptor from the parent component and make the DOM element
-    const elem = document.createElement(template.tag);
-
-    // Set each property via the adaptor functions and add to dom
-    setData(data, elem);
-    comp.ref.appendChild(elem);
-  }
 
   // Makes a tree of components with only the ref property
   const getChildRefs = (dct: any) =>
@@ -83,19 +85,42 @@ function connectList(comp: any, list: List<any>)
     return refs;
   }
 
-  const addComp = (_: any, data: any) =>
+  const setData = (data:any, elem:any) =>
   {
-    // Plant the dom subtree
-    plantDOMTree({...template.tag}, comp.ref);
-
-    // After planting, adaptor.tag has the refs of its DOM elements
-    // We need to collect the refs tree for this item
-    comp.refs = getChildRefs(template.tag);
-    setData(data, comp.refs);
+    // Set each property via the adaptor functions
+    for(const key of Object.keys(data))
+    {
+      const setter = template[key];
+      setter(elem, data[key]);
+    }
   }
 
+  const addElem = (_: any, data: any) =>
+  {
+    // Get the template and make the DOM element, set all properties, add to the parent, save ref
+    const elem = document.createElement(template.tag);
+    setData(data, elem);
+    comp.ref.appendChild(elem);
+    addToDictArray(comp, 'refs', {ref: elem});
+  }
+
+  const addComp = (_: any, data: any) =>
+  {
+    // Plant the dom subtree, then save the refs of all children in a tree
+    plantDOMTree({...template.tag}, comp.ref);
+    const childRefs = getChildRefs(template.tag);
+    addToDictArray(comp, 'refs', childRefs);
+  }
+
+  const delElem = (_: any, index: number) =>
+  {
+    comp.ref.removeChild(comp.ref.children[index]);
+  }
+
+  // Connect the list add signal to the add function
   wire(`${name}.add`, isComp?  addComp: addElem);
+
 }
 
 
-export {addSlot, connectList, List};
+export {addSlot, connectList, addToDictArray, List};

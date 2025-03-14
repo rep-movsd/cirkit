@@ -1,3 +1,6 @@
+import {addToDictArray} from './cirkit-utils.js';
+
+
 type Signal = string;
 type Slot = (signal: Signal, ctx: any) => void;
 
@@ -9,8 +12,7 @@ const wire = (signal: Signal, target: Slot|string) =>
   let slot: Slot = (typeof target === 'function') ? target : (sig, ctx) => emit(sig, ctx);
 
   // Append the slot to the signal's slot list.
-  if(!SwitchBoard[signal]) SwitchBoard[signal] = [];
-  SwitchBoard[signal].push(slot);
+  addToDictArray(SwitchBoard, signal, slot);
 };
 
 type Signaling = { signal: Signal, ctx: any };

@@ -1,4 +1,4 @@
-import type { Dict, ComponentMap} from './cirkit-types';
+import type {ComponentMap, Dict} from './cirkit-types';
 
 import {emit} from './cirkit-junction.js';
 
@@ -8,9 +8,41 @@ const DOMAttrMap: any =
 };
 
 // These are special properties that are objects and should not be treated as children
-const SpecialAttr = ['template', 'ref', 'style', 'select'];
+const SpecialAttr = ['template', 'ref', 'style', 'signals'];
 
-function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement): void
+
+function exposeEvtSignals(dctProps: Dict, element: HTMLElement, path: string)
+{
+  // Expose signals
+  if(dctProps.signals)
+  {
+    for(const evt of dctProps.signals)
+    {
+      console.log('expose', element, path, evt);
+      element.addEventListener(evt, (e: any) => emit(path + '.' + evt, e));
+    }
+  }
+}
+
+function handleProps(dctProps: Dict, element: HTMLElement, path: string)
+{
+  // Set the properties
+  if(dctProps.kind) element.className = dctProps?.kind;
+  if(dctProps.span != null) element.style.flexGrow = String(dctProps.span);
+  if(dctProps.text) element.innerText = dctProps.text;
+  if(dctProps.style)
+  {
+    for(const [prop, value] of Object.entries(dctProps.style))
+    {
+      element.style.setProperty(prop, value as string);
+    }
+  }
+
+  exposeEvtSignals(dctProps, element, path);
+}
+
+
+function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = ''): void
 {
   for(const sKey in dct)
   {
@@ -19,16 +51,10 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement): void
     let element: HTMLElement;
     element = document.createElement(tagName);
 
-    if(dctProps.kind) element.className = dctProps?.kind;
-    if(dctProps.span != null) element.style.flexGrow = String(dctProps.span);
-    if(dctProps.text) element.innerText = dctProps.text;
-    if(dctProps.style)
-    {
-      for(const [prop, value] of Object.entries(dctProps.style))
-      {
-        element.style.setProperty(prop, value as string);
-      }
-    }
+    // Save the path
+    path = path ? path + '.' + sKey : sKey;
+
+    handleProps(dctProps, element, path);
 
     // Recursively process children
     for(const prop in dctProps)
@@ -39,9 +65,9 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement): void
       if(typeof child === "object" && !SpecialAttr.includes(prop))
       {
         if(Array.isArray(child))
-          child.forEach(item => plantDOMTree({[prop]: item}, element));
+          child.forEach(item => plantDOMTree({[prop]: item}, element, path));
         else
-          plantDOMTree({[prop]: child}, element);
+          plantDOMTree({[prop]: child}, element, path);
       }
       else if(typeof child === "string" && DOMAttrMap[tagName]?.includes(prop))
       {
@@ -49,22 +75,15 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement): void
       }
     }
 
+    element.dataset.path = path;
     dctProps.ref = element;
     elemSite.appendChild(element);
   }
 }
 
-function exposeEventSignal(app: ComponentMap, path: string, evt: string)
-{
-  // Drill down the path like a.b.c.d
-  const arrPath: string[] = path.split('.');
-  let comp: ComponentMap = app;
-  for(const sKey of arrPath) comp = comp[sKey];
-  comp.ref.addEventListener(evt, (e: any) => emit(path + '.' + evt, e));
-}
 
 const setProp = (prop: string) => (elem: any, value: any) => elem[prop] = value;
 const setStyle = (prop: string) => (elem: any, value: any) => elem.style[prop] = value;
 const setAttr = (attr: string) => (elem: any, value: any) => elem.setAttribute(attr, value);
 
-export {plantDOMTree, exposeEventSignal, setAttr, setProp, setStyle};
+export {plantDOMTree, exposeEvtSignals, setAttr, setProp, setStyle};

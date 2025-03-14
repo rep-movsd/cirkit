@@ -10,6 +10,7 @@ declare namespace h.JSX {
 function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
 {
   //console.log(`\nh: tag=${sTag}, dctProps=${JSON.stringify(dctProps)}, arrChildren=${JSON.stringify(arrChildren)}`);
+  const isCollection = dctProps?.trait != null;
 
   // Process children into an object.
   let dctChildObject: { [key: string]: any } = {};
@@ -21,8 +22,8 @@ function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
     dctChildObject[sChildKey] = child[sChildKey];
   };
 
-  // A collection element with childTag has only one template child.
-  if(dctProps?.trait == 'list')
+  // A list collection element will have a template property and a selection helper
+  if(isCollection)
   {
     dctProps.template = Object.values(arrChildren[0])[0];
   }
