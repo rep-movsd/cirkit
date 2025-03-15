@@ -1,73 +1,85 @@
-import {emit, wire, Slot} from './cirkit-junction.js';
+import {emit, wire, Slot, Signal} from './cirkit-junction.js';
 import {plantDOMTree} from './cirkit-dom.js';
-import type {IndexedItem} from './cirkit-types.js'
+import type {Component, IndexedItem} from './cirkit-types.js';
 
-function addToDictArray(dct: any, key: string, item: any)
+export function addToDictArray(dct: any, key: string, item: any)
 {
   if(!dct[key]) dct[key] = [];
   dct[key].push(item);
 }
 
-function addSlot(comp:any, name: string, func: any)
+export function firstDictVal(dct: any): any
+{
+  return dct[Object.keys(dct)[0]];
+}
+
+export function addSlot(comp:any, name: string, func: any)
 {
   if(!comp.slots) comp.slots = {};
   comp.slots[name] = func.bind(comp);
 }
 
-class List<T>
+export class List<T>
 {
   private _data: T[] = [];
   private readonly _name: string;
   private _selected: number = -1;
 
+  public slots: any;
+
   constructor(name: string)
   {
     this._name = name;
+
+    this.slots = {
+      // Single select slot
+      doSelect: (index: number) =>
+      {
+        if(this._selected !== index)
+        {
+          // Emit a signal to deselect the current selection
+          if(this._selected >= 0)
+            emit(`${this._name}.sel`, {index: this._selected, selected: false});
+
+          // Emit a signal to select the new item
+          this._selected = index;
+          emit(`${this._name}.sel`, {index, selected: true});
+        }
+      }
+    }
   }
 
   get name(): string {return this._name;}
 
   get items(): T[] {return this._data;}
 
-  get selected(): number {return this._selected;}
+  get selectedItem(): T
+  {
+    return this._data[this._selected];
+  }
 
   public add(item: T): void
   {
     this._data.push(item);
     const ii: IndexedItem = {item, index: this._data.length - 1};
-    emit(`${this._name}.add`, ii);
+    emit(`${this._name}.+`, ii);
   }
 
   public set(index: number, item: T): void
   {
     this._data[index] = item;
-    emit(`${this._name}.set`, item);
+    emit(`${this._name}.*`, item);
   }
 
-  del(index: number): void
+  public del(index: number): void
   {
     this._data.splice(index, 1);
-    emit(`${this._name}.del`, index);
-  }
-
-  // Single select
-  select(index: number): void
-  {
-    if(this._selected !== index)
-    {
-      // Emit a signal to deselect the current selection
-      if(this._selected >= 0)
-        emit(`${this._name}.sel`, -1);
-
-      // Emit a signal to select the new item
-      this._selected = index;
-        emit(`${this._name}.sel`, index);
-    }
+    emit(`${this._name}.-`, index);
   }
 }
 
 
-function connectList(comp: any, list: List<any>)
+export function bindList(comp: Component, list: List<any>)
 {
   const name = list.name;
   const template = comp.template;
@@ -98,7 +110,7 @@ function connectList(comp: any, list: List<any>)
     }
   }
 
-  const addElem = (_: any, data: IndexedItem) =>
+  const addElem = (data: IndexedItem) =>
   {
     // Get the template and make the DOM element, set all properties, add to the parent, save ref
     const elem = document.createElement(template.tag);
@@ -107,24 +119,41 @@ function connectList(comp: any, list: List<any>)
     setData(data, comp);
   }
 
-  const addComp = (_: any, data: IndexedItem) =>
+  const addComp = (data: IndexedItem) =>
   {
+    // Inject parent path into the item
+    const tag = {...template.tag};
+    //tag[Object.keys(tag)[0]].parent = comp.ref.dataset.path;
+
     // Plant the dom subtree, then save the refs of all children in a tree
-    plantDOMTree({...template.tag}, comp.ref);
+    plantDOMTree(tag, comp.ref, comp.ref.dataset.path);
     const childRefs = getChildRefs(template.tag);
     addToDictArray(comp, 'refs', childRefs);
     setData(data, comp);
   }
 
-  const delElem = (_: any, index: number) =>
+  const delElem = (index: number) =>
   {
-    comp.ref.removeChild(comp.ref.children[index]);
+    const elem = comp.refs[index];
+    comp.ref.removeChild(elem);
+    comp.refs.splice
   }
 
-  // Connect the list add signal to the add function
-  wire(`${name}.add`, isComp?  addComp: addElem);
+  // Connect the list signals to corresponding ones here
+  wire(`${name}.+`, isComp? addComp: addElem);
+  wire(`${name}.-`, delElem);
+
+  const selector = comp.selector;
+  if(selector)
+  {
+    wire
+    (
+      `${name}.sel`,
+      item =>
+      {
+        selector(comp.refs, item.index, item.selected);
+      }
+    );
+  }
 
 }
-
-
-export {addSlot, connectList, addToDictArray, List};
