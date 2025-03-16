@@ -106,7 +106,7 @@ export function bindList(comp: Component, list: List<any>)
     for(const key of Object.keys(data.item))
     {
       const setter = template[key];
-      setter(elem.refs, data.item[key], data.index);
+      setter(elem.refs[data.index], data.item[key]);
     }
   }
 
@@ -136,7 +136,7 @@ export function bindList(comp: Component, list: List<any>)
   {
     const elem = comp.refs[index];
     comp.ref.removeChild(elem);
-    comp.refs.splice
+    comp.refs.splice(index, 1);
   }
 
   // Connect the list signals to corresponding ones here
@@ -146,14 +146,6 @@ export function bindList(comp: Component, list: List<any>)
   const selector = comp.selector;
   if(selector)
   {
-    wire
-    (
-      `${name}.sel`,
-      item =>
-      {
-        selector(comp.refs, item.index, item.selected);
-      }
-    );
+    wire(`${name}.sel`, item => selector(comp.refs[item.index], item.selected));
   }
-
 }

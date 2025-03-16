@@ -9,10 +9,10 @@ declare namespace h.JSX {
 // It builds a nested dictionary of components and their properties.
 function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
 {
-  console.log(`tag=${sTag}`);
-  console.log(`dctProps=${JSON.stringify(dctProps)})`)
-  console.log(`arrChildren=${JSON.stringify(arrChildren)}`);
-  console.log('---------------------------------');
+  console.log(sTag);
+  console.log('props', JSON.stringify(dctProps));
+  console.log('children', JSON.stringify(arrChildren));
+  console.log('-----------------');
 
   const isCollection = dctProps?.trait && dctProps.trait !== 'item';
 

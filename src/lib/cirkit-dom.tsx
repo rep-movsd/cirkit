@@ -107,34 +107,22 @@ export function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: str
 }
 
 
-export const setProp = (prop: string) =>
-  (refs: any[], value: any, index: number) => refs[index][prop] = value;
-
-export const setAttr = (attr: string) =>
-  (refs: any[], value: any, index: number) => refs[index].setAttribute(attr, value);
-
+export const setProp = (prop: string) => (ref: any, value: any) => ref[prop] = value;
+export const setAttr = (attr: string) => (ref: any, value: any) => ref.setAttribute(attr, value);
 export const setClass = (className: string) =>
-  (refs: any[], index: number, set: boolean) =>
-  {
-    let ref = refs[index];
-    ref = firstDictVal(ref)?.ref || ref;
-    ref.classList[set? 'add' : 'remove'](className)
-  };
-
+  (ref: any, set: boolean) => (firstDictVal(ref)?.ref || ref).classList.toggle(className, set);
 
 export const setStyle = (prop: string) =>
 {
   if(!prop.includes('.'))
-    return (refs: any[], value: any, index: number) => refs[index].style[prop] = value;
+    return (ref: any, value: any) => ref.style[prop] = value;
   else
-    return (refs: any[], value: any, index: number) =>
+    return (comp: any, value: any) =>
     {
       const arrPath: string[] = prop.split('.');
-      let comp = refs[index];
       let styleProp = arrPath.pop()!;
       for(const key of arrPath)
         comp = comp[key];
-
       comp.ref.style[styleProp] = value;
     }
 }
