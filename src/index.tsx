@@ -11,20 +11,19 @@ import {data} from './model.js';
 const root: ComponentMap = (
   <app kind='VBox app'>
 
-    <todos trait='list' tag='ul' span={20} bind={data.todos} selector={setClass('selected')}  >
-      <item-template tag={'li'} signals={['click']} text={setProp('innerText')} color={setStyle('color')} />
+    <todos trait='list' tag='ul' span={20} bind={data.todos} selector={setClass('selected')} signals={['item.click']}  >
+      <item-template tag={'li'} text={setProp('innerText')} color={setStyle('color')} />
     </todos>
 
     <todoAdd kind='HBox' span={1}>
       <todoInput tag='input' placeholder='Enter item to add' span={9} signals={['keypress']} />
       <buttonAdd tag='button' text='Add Item' span={1} signals={['click']} />
     </todoAdd>
-
-    <colors trait='list' kind='HBox' span={2} bind={data.colors} selector={setClass('todoColorSelected')}>
+    <colors trait='list' kind='HBox' span={2} bind={data.colors} selector={setClass('todoColorSelected')} signals={['item.click']}>
       <item-template color={setStyle('box.boxColor.backgroundColor')}>
         <tag>
-          <box kind='VBox' span={0} style={{'min-width': '50px'}} signals={['click']} trait='item'>
-            <boxColor tag='div' span={1}/>
+          <box kind='VBox' span={0} style={{'min-width': '50px'}}>
+            <boxColor tag='div' span={1} signals={['click']}/>
           </box>
         </tag>
       </item-template>
@@ -37,6 +36,9 @@ const app = plantDOMTree(root, document.body);
 // Add some initial colors, components will be updated via the bind property in the JSX
 data.colors.add({color: 'darkred'});
 data.colors.add({color: 'blue'});
+
+data.todos.add({text: 'First item', color: 'darkred'});
+data.todos.add({text: 'Second item', color: 'blue'});
 
 // Add a slot to the app container that will add a to-do item to the list from the input
 addSlot
@@ -67,6 +69,8 @@ wire('app.todoAdd.buttonAdd.click', app.slots.doAddTodo);
 wire('app.todoAdd.todoInput.keypress', evt => evt.key === 'Enter' && emit('app.addTodo'));
 
 // Wire color item click to the slot in data.colors
-wire('app.colors.box.click', data.colors.slots.doSelect);
+wire('app.colors.item.click', data.colors.slots.doSelect);
 
 console.log('App', app);
+
+console.log('Root', root);

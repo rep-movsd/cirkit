@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "build": "tsc && cp src/lib/cirkit.css src/index.html src/index.css dist/",
-    "serve": "live-server dist"
+    "serve": "serve dist"
   },
   "devDependencies": {
     "typescript": "^4.5.0"

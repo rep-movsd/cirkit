@@ -12,7 +12,32 @@ const DOMAttrMap: any =
 const SpecialAttr = ['template', 'ref', 'style', 'signals', 'selector', 'parent', 'bind'];
 
 
-function handleProps(comp: Component, dctProps: Dict, element: Component, path: string)
+function getIndex(elem: any): number
+{
+  // Keep moving up the dom tree till we find the top most elem with the _index property or the collection component
+  while(!elem._trait && elem._index == null) elem = elem.parentElement;
+  return elem._index;
+}
+
+
+function attachSignalHandlers(dctProps: Dict, element: HTMLElement, path: string)
+{
+  for(const signal of dctProps.signals)
+  {
+    // Item signal handlers are attached to the parent
+    if(signal.startsWith('item.'))
+    {
+      element.addEventListener(signal.split('.')[1], (evt: any) => (evt.target !== element) && emit(path + '.' + signal, getIndex(evt.target)));
+    }
+    else
+    {
+      element.addEventListener(signal, (evt: any) => emit(path + '.' + signal, getIndex(evt.target)));
+    }
+  }
+}
+
+
+function handleProps(comp: Component, dctProps: Dict, element: any, path: string)
 {
   // Set the properties
   if(dctProps.kind) element.className = dctProps?.kind;
@@ -26,28 +51,11 @@ function handleProps(comp: Component, dctProps: Dict, element: Component, path: 
     }
   }
 
+  if(dctProps.trait) element._trait = dctProps.trait;
+
   if(dctProps.signals)
   {
-    for(const signal of dctProps.signals)
-    {
-      if(dctProps.trait === 'item')
-      {
-        element.addEventListener
-        (
-          signal,
-          (evt: any) =>
-          {
-            const index = Array.prototype.indexOf.call(evt.currentTarget.parentElement.children, evt.currentTarget);
-            emit(path + '.' + signal, index);
-          },
-          {capture: true},
-        );
-      }
-      else
-      {
-        element.addEventListener(signal, (evt: any) => emit(path + '.' + signal, evt));
-      }
-    }
+    attachSignalHandlers(dctProps, element, path);
   }
 
   // Bind the list to the component

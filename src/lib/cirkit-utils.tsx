@@ -114,6 +114,7 @@ export function bindList(comp: Component, list: List<any>)
   {
     // Get the template and make the DOM element, set all properties, add to the parent, save ref
     const elem = document.createElement(template.tag);
+    elem._index = data.index;
     comp.ref.appendChild(elem);
     addToDictArray(comp, 'refs', elem);
     setData(data, comp);
@@ -129,6 +130,9 @@ export function bindList(comp: Component, list: List<any>)
     plantDOMTree(tag, comp.ref, comp.ref.dataset.path);
     const childRefs = getChildRefs(template.tag);
     addToDictArray(comp, 'refs', childRefs);
+
+    // Get the top level element and save the index into it
+    firstDictVal(comp.refs[data.index]).ref._index = data.index;
     setData(data, comp);
   }
 
