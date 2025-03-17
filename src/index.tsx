@@ -4,11 +4,9 @@ import {addSlot, List} from './lib/cirkit-utils.js';
 import {wire, emit} from './lib/cirkit-junction.js';
 import {plantDOMTree, setProp, setStyle, setClass} from './lib/cirkit-dom.js';
 
-// Todo and color item types
+// Data model for the app
 type TodoItem = { text: string, color: string };
 type TodoColorItem = {color: string, select?: boolean};
-
-// Data model for the app
 export const data =
 {
   // The List class emits signals when items are added, set, or deleted
@@ -20,7 +18,8 @@ export const data =
 const root: ComponentMap =
   <app kind='VBox app'>
 
-    <todos trait='list' tag='ul' span={20} bind={data.todos} selector={setClass('todoSelected')} signals={['item.click']}  >
+    <todos trait='list' tag='ul' span={20} style={{border: "1px solid black", "list-style-position": "inside"}}
+           bind={data.todos} selector={setClass('todoSelected')} signals={['item.click']}  >
       <item-template tag={'li'} text={setProp('innerText')} color={setStyle('color')} />
     </todos>
 
@@ -29,10 +28,11 @@ const root: ComponentMap =
       <buttonAdd tag='button' text='Add Item' span={1} signals={['click']} />
     </todoAdd>
 
-    <colors trait='list' kind='HBox' span={2} bind={data.colors} selector={setClass('todoColorSelected')} signals={['item.click']}>
+    <colors trait='list' kind='HBox' span={0} style={{'min-height': '40px'}}
+            bind={data.colors} selector={setClass('todoColorSelected')} signals={['item.click']}>
       <item-template color={setStyle('box.boxColor.backgroundColor')}>
         <tag>
-          <box kind='VBox' span={0} style={{'min-width': '50px'}}>
+          <box kind='VBox' span={0} style={{'min-width': '32px'}}>
             <boxColor tag='div' span={1} signals={['click']}/>
           </box>
         </tag>
@@ -75,3 +75,6 @@ wire('app.todos.item.click', data.todos.slots.doSelect);
 data.colors.add({color: 'darkred'});
 data.colors.add({color: 'darkgreen'});
 data.colors.add({color: 'darkblue'});
+
+// Select the first color
+emit('app.colors.item.click', 0);
