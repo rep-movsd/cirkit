@@ -53,10 +53,10 @@ In most frameworks, you would have to either add a new event handler to the butt
 In Cirkit, you could simply do this :
 ```ts
 // Setup the count state
-data.updateCount = 0;
+data.count = 0;
 
 // Add a slot that updates the label
-const doUpdateUploadCount = () => app.panelCount.labelUploadCount.ref.textContent = `Upload count: ${data.updateCount}`;
+const doUpdateUploadCount = () => app.panelCount.labelUploadCount.ref.textContent = `Upload count: ${data.count}`;
 
 // Wire the button click to increment the count and emit the update signal
 wire('app.updateButton.click', () => { data.count++; emit('app.doUpdateUploadCount');});
@@ -173,7 +173,7 @@ During the process, it attaches several properties to the component map, includi
 ---
 
 #### Slot (Action Handler)
-Now we define a slo that does the actual job of adding an item to the list
+Now we define a slot that does the actual job of adding an item to the list
 ```ts
 function addTodo() {
   const elemInput = app.todoAdd.todoInput.ref;
@@ -186,7 +186,7 @@ function addTodo() {
 
 Notice two things here:
 - We can access the input element as a dotted path in the app object as `app.todoAdd.todoInput.ref` 
-- The **data.todos** list is updated directly, and the UI is automagically updated to reflect the change
+- The `data.todos` list is updated directly, and the UI is automagically updated to reflect the change
 
 ---
 #### Signal Connections
@@ -200,11 +200,16 @@ wire('app.addTodo', addTodo);
 wire('app.todoAdd.todoInput.keypress', evt => evt.key === 'Enter' && emit('app.addTodo'));
 ```
 
-Even if a function could be called directly, it is better to emit a signal that is connected to it as a slot to maintain the decoupling of various bits of code.
+Even if a slot function could be called directly, it is better to emit a signal that is connected to the slot, in order to maintain decoupling among various bits of code.
 
-Here we wire a signal 'app.addTodo' to the slot function that adds a todo item to the list.
+Here we wire a signal `app.addTodo` to the slot function that adds a todo item to the list.
 We also wire the keypress event of the input field to emit the 'app.addTodo' signal when the Enter key is pressed.
 
-Cirkit automatically sets up event handlers for the items in the **signals** property of a component - in this case we had `signals={['keypress']}` so a keypress event handler was added that would emit the signal 'app.todoAdd.todoInput.keypress' 
+Cirkit automatically sets up event handlers for the items in the `signals` property of a component - in this case we had `signals={['keypress']}` so a keypress event handler was added that would emit the signal `'app.todoAdd.todoInput.keypress'` 
 
 Note that every HTML element that was added to the DOM will have the dotted component path stored in `dataset.path` 
+
+
+## ... To be continued ...
+
+---\
