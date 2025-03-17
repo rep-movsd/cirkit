@@ -1,9 +1,20 @@
 import type {ComponentMap, Component} from './lib/cirkit-types';
 import {h} from './lib/cirkit-jsx.js';
-import {addSlot} from './lib/cirkit-utils.js';
+import {addSlot, List} from './lib/cirkit-utils.js';
 import {wire, emit} from './lib/cirkit-junction.js';
 import {plantDOMTree, setProp, setStyle, setClass} from './lib/cirkit-dom.js';
-import {data} from './model.js';
+
+// Todo and color item types
+type TodoItem = { text: string, color: string };
+type TodoColorItem = {color: string, select?: boolean};
+
+// Data model for the app
+export const data =
+{
+  // The List class emits signals when items are added, set, or deleted
+  todos: new List<TodoItem>('todos'),
+  colors: new List<TodoColorItem>('colors'),
+}
 
 // We always start with a top level component called app
 const root: ComponentMap =
