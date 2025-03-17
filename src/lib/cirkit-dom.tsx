@@ -15,7 +15,7 @@ const SpecialAttr = ['template', 'ref', 'style', 'signals', 'selector', 'parent'
 function getIndex(elem: any): number
 {
   // Keep moving up the dom tree till we find the top most elem with the _index property or the collection component
-  while(!elem._trait && elem._index == null) elem = elem.parentElement;
+  while(elem && elem._trait == null && elem._index == null) elem = elem?.parentElement;
   return elem._index;
 }
 
@@ -31,7 +31,12 @@ function attachSignalHandlers(dctProps: Dict, element: HTMLElement, path: string
     }
     else
     {
-      element.addEventListener(signal, (evt: any) => emit(path + '.' + signal, getIndex(evt.target)));
+      element.addEventListener(
+        signal,
+        (evt: any) => {
+          emit(path + '.' + signal, evt);
+        }
+      );
     }
   }
 }

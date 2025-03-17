@@ -2,3 +2,8 @@
 {
   background: lightgreen;
 }
+
+.todoSelected
+{
+  background: lightblue;
+}
