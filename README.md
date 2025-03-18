@@ -14,8 +14,8 @@ It is currently a work in progress and will get better and more feature-rich wit
 - **Signal-slot system** for event propagation and decoupled communication
 - **Reactive list binding** with selection support
 - **Efficient DOM updates** using direct references and minimal index lookups
-- **Simple styling with CSS flexbox layouts** (`HBox`, `VBox`)
-- **No dependencies**—just clean TypeScript and vanilla JS
+- **Simple styling with CSS flexbox layouts** 
+- **No dependencies** — just clean TypeScript and vanilla JS
 
 ---
 
@@ -31,13 +31,13 @@ By the time React 18 came out with hooks and effects and functions as components
 
 Whenever I did any personal project with a UI, I cursed at the spaghetti code that was React, and the opaque nature of its architecture.
 
-I'd been thinking of "rolling my own" for a very long time, but only recently managed to crystallize a coherent design. 
-
-Cirkit is designed with a very narrowed expectation for web design based on the idea that most web apps do not require the complex and hard to understand features that most popular frameworks provide. It is meant to make things as simple as needed, without just having complex technologies for the sake of it.
-
 Facebook had an entire video on how they fixed phantom message notifications with React, but many years later, we still see them. I put this down to the fact that the complexity of the frameworks internals is so high that it is impossible to understand all the edge cases and interactions that can happen. The fact that React code needs to be compiled in order to optimize away the re-rendering because no one can get it right, is something that anyone should find troubling.
 
-We (meaning I and our dear friend ChatGPT) have hashed out a few opinionated ideas that guide the design of Cirkit, and followed our heart to get what I have here.
+I finally decided to try rolling my own and started this project - the name is a play on the word "circuit" and the fact that it is a kit for building UIs.
+
+Cirkit is designed with a very narrowed expectation for web design, based on the premise that most web apps do not require the complex and hard to understand features that most popular frameworks provide. It is meant to make things as simple as needed, without sacrificing power or flexibility.
+
+We (meaning I and our dear friend ChatGPT) have hashed out a few opinionated ideas that guide the design of Cirkit, and followed our hearts to get what I have here.
 
 ### Signals and Slots
 
@@ -210,6 +210,102 @@ Cirkit automatically sets up event handlers for the items in the `signals` prope
 Note that every HTML element that was added to the DOM will have the dotted component path stored in `dataset.path` 
 
 
-## ... To be continued ...
+## Diving a bit deeper
 
----\
+Now that we have seen the basics, lets look at some of the concepts and usage patterns in more detail
+
+### Collection components and data binding
+
+The collection component is meant to represent a group of similar items.
+It is meant to map a UI element to a List<T> object, such that manipulating the list will automatically update the UI.
+
+The obvious case for such components are lists and tables, however a number of UI elements can be thought of as collections, including menus, tab controls and accordions, if we also add selection index as part of the list. 
+As of now, we support single selection arrays - eventually we will add multiselect and binding tp Set or Map collections as well.
+
+A List<T> provides add(), del(), set(), and select() methods to manipulate it (bulk operations will be added later). Calling any of these methods will emit a signal. List components expect T to be an object, not a primitive type.
+
+When a collection component is bound to a List object, Cirkit internally connects these signals to slots that manipulate the underlying DOM.
+During this phase, the component map also gets `ref` properties pointing to the DOM elements.
+
+Let's look at a slightly more complex TODO list (signal and slot code are omitted for brevity)
+
+```tsx
+type TodoItem = { text: string, color: string };
+type TodoColorItem = {color: string, select?: boolean};
+export const data =
+{
+  todos: new List<TodoItem>('todos'),
+  colors: new List<TodoColorItem>('colors'),
+}
+
+<app kind='VBox app'>
+
+  <todos trait='list' tag='ul' span={20} style={{border: "1px solid black", "list-style-position": "inside"}}
+         bind={data.todos} selector={setClass('todoSelected')} signals={['item.click']}  >
+    <item-template tag={'li'} text={setProp('innerText')} color={setStyle('color')} />
+  </todos>
+
+  <todoAdd kind='HBox' span={1}>
+    <todoInput tag='input' placeholder='Enter item to add' span={9} signals={['keypress']} />
+    <buttonAdd tag='button' text='Add Item' span={1} signals={['click']} />
+  </todoAdd>
+
+  <colors trait='list' kind='HBox' span={0} style={{'min-height': '40px'}}
+          bind={data.colors} selector={setClass('todoColorSelected')} signals={['item.click']}>
+    <item-template color={setStyle('box.boxColor.backgroundColor')}>
+      <tag>
+        <box kind='VBox' span={0} style={{'min-width': '32px'}}>
+          <boxColor tag='div' span={1} signals={['click']}/>
+        </box>
+      </tag>
+    </item-template>
+  </colors>
+</app>
+
+```
+
+We have added a color selection box to the above example - notice that this colors collection has a nested structure, with a box containing a div that is the actual color box. Whereas the tag was specified as a property in the `todos` collection, here the tag is specified as a nested JSX element.
+
+We can access the Nth `<li>` element in `todos` as `app.todos.refs[n]`
+For colors we can access the nested elements of the Nth color component as `app.colors.refs[n].box.ref` and `app.colors.refs[n].box.boxColor.ref`
+
+Unlike most frameworks, you don't need to explicitly maintain refs to parts of your UI DOM. Since all components are named and have a path, you can access them directly from the app object. 
+
+Note that the `<item-template>` and `<tag>` elements are placeholders and do not get rendered in the DOM. They are only a convenience to specify the structure of the collection items.
+
+### DOM updates and mutation
+
+Since we have direct references to all the DOM elements, directly updating the state of DOM elements is simple.
+For more complex updates to nested components, you can setup Proxy based data objects that emit signals when they are updated, and connect corresponding slots to update the UI.
+
+For collection components, calling set() or add() on the List object will update the collection element by calling a function for each key of the data element.
+
+In this example - each todo item has text and color key and corresponding properties in the `<item-template>` element for the todos collection.
+These properties are assigned to setColor and setText - these are factories that generate updator functions:
+  - `setStyle('color')` returns a lambda like `(ref, value) => ref.style['color'] = value`
+  - `setProp('innerText')` returns a lambda like `(ref, value) => ref.innerText = value`
+
+When the data object is updated, the corresponding function is called with the ref and the value to update the DOM element.
+
+Cirkit predefines a few DOM updaters 
+  - setProp - sets a property of the DOM element
+  - setClass - sets or removes a class for the DOM element
+  - setAttr - sets an attribute of the DOM element (for example `disabled`)
+  - setStyle - sets some property on the element style
+
+Notice that for <colors> we have a nested structure, and the color is set on the innermost div element. 
+We specify the nested reference like `color={setStyle('box.boxColor.backgroundColor')}` which returns a lambda that modifies the nested element.
+
+As of now this system only works for collection elements - eventually we will allow any component to be mapped to a data object and have its properties updated in a similar way.
+
+Another special property for collection components is `selector` - we can assign one of the above updaters to this property and it will be called when an item is selected or deselected via the `select()` method of the bound List object.
+
+This updater is called twice - once to deselect the existing selection if any, and then once to select the new item
+
+### Event handling and signals for collections
+
+Traditionally there are two ways to handle events in a list 
+- Attach a handler (for example click) to each item in the list
+- Attach a single handler to the list itself and detect which item was clicked
+
+The first method is simple but is resource intensive

@@ -1,8 +1,4 @@
-import type {ComponentMap, Component} from './lib/cirkit-types';
-import {h} from './lib/cirkit-jsx.js';
-import {addSlot, List} from './lib/cirkit-utils.js';
-import {wire, emit} from './lib/cirkit-junction.js';
-import {plantDOMTree, setProp, setStyle, setClass} from './lib/cirkit-dom.js';
+import {ComponentMap, Component, h, plantDOMTree, setProp, setStyle, setClass, List, addSlot, wire, emit} from './lib/cirkit.js';
 
 // Data model for the app
 type TodoItem = { text: string, color: string };
@@ -65,7 +61,7 @@ wire('app.addTodo', app.slots.doAddTodo);
 
 // Wire up the button click and Enter keypress on the input to add an item
 wire('app.todoAdd.buttonAdd.click', app.slots.doAddTodo);
-wire('app.todoAdd.todoInput.keypress', evt => evt.key === 'Enter' && emit('app.addTodo'));
+wire('app.todoAdd.todoInput.keypress', (evt: any) => evt.key === 'Enter' && emit('app.addTodo'));
 
 // Wire item clicks to selections
 wire('app.colors.item.click', data.colors.slots.doSelect);
