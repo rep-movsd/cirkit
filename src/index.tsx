@@ -12,23 +12,23 @@ export const data =
 
 // We always start with a top level component called app
 const root: ComponentMap =
-  <app kind='VBox app'>
+  <app class='VBox app'>
 
-    <todos trait='list' tag='ul' span={20} style={{border: "1px solid black", "list-style-position": "inside"}}
-           bind={data.todos} selector={setClass('todoSelected')} signals={['item.click']}  >
+    <todos class='vscroll' trait='list' tag='ul' span={20} style={{border: "1px solid black", "list-style-position": "inside"}}
+           bind={data.todos} selector={setClass('todoSelected')} signals={['item.mousedown']}  >
       <item-template tag={'li'} text={setProp('innerText')} color={setStyle('color')} />
     </todos>
 
-    <todoAdd kind='HBox' span={1}>
+    <todoAdd class='HBox' span={1}>
       <todoInput tag='input' placeholder='Enter item to add' span={9} signals={['keypress']} />
       <buttonAdd tag='button' text='Add Item' span={1} signals={['click']} />
     </todoAdd>
 
-    <colors trait='list' kind='HBox' span={0} style={{'min-height': '40px'}}
+    <colors trait='list' class='HBox' span={0} style={{'min-height': '40px'}}
             bind={data.colors} selector={setClass('todoColorSelected')} signals={['item.click']}>
       <item-template color={setStyle('box.boxColor.backgroundColor')}>
         <tag>
-          <box kind='VBox' span={0} style={{'min-width': '32px'}}>
+          <box class='VBox' span={0} style={{'min-width': '32px'}}>
             <boxColor tag='div' span={1} signals={['click']}/>
           </box>
         </tag>
@@ -36,9 +36,12 @@ const root: ComponentMap =
     </colors>
   </app>
 
+console.log(root);
+
 const app = plantDOMTree(root, document.body);
 
 // Add a slot to the app container that will add a to-do item to the list from the input
+// Item will be added at the the selected point in the list if any
 addSlot
 (
   app,
@@ -49,7 +52,8 @@ addSlot
     const elemInput = this.todoAdd.todoInput.ref;
     if(elemInput.value)
     {
-      data.todos.add({text: elemInput.value, color: data.colors.selectedItem?.color || 'black'});
+      const pos = data.todos.selectedIdx;
+      data.todos.add({text: elemInput.value, color: data.colors.selectedItem?.color || 'black'}, pos);
       elemInput.value = '';
     }
   }
@@ -64,13 +68,22 @@ wire('app.todoAdd.buttonAdd.click', app.slots.doAddTodo);
 wire('app.todoAdd.todoInput.keypress', (evt: any) => evt.key === 'Enter' && emit('app.addTodo'));
 
 // Wire item clicks to selections
+wire('todos.item.select', data.todos.slots.doSelect);
+wire('app.todos.item.mousedown', 'todos.item.select');
+
 wire('app.colors.item.click', data.colors.slots.doSelect);
-wire('app.todos.item.click', data.todos.slots.doSelect);
 
 // Add colors
 data.colors.add({color: 'darkred'});
 data.colors.add({color: 'darkgreen'});
-data.colors.add({color: 'darkblue'});
+data.colors.add({color: 'darkblue'}, 0);
 
 // Select the first color
 emit('app.colors.item.click', 0);
+
+console.time('add bulk');
+for(let i = 0; i < 10000; i++)
+{
+  data.todos.add({text: `Item ${i}`, color: 'black'});
+}
+console.timeEnd('add bulk');

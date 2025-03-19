@@ -28,7 +28,7 @@ const SignalQueue: Signal[] = [];
 const wire = (signal: SignalName, target: Slot|string) =>
 {
   // If the target is a function, otherwise its another signal, so create a function that emits the signal.
-  let slot: Slot = (typeof target === 'function') ? target : (data, sig) => emit(sig, data);
+  let slot: Slot = (typeof target === 'function') ? target : (data, sig) => emit(target, data);
 
   // Append the slot to the signal's slot list.
   addToDictArray(SwitchBoard, signal, slot);
@@ -85,10 +85,10 @@ const SpecialAttr = ['ref', 'style', 'signals', 'selector', 'bind', 'template'];
 // It builds a nested dictionary of components and their properties.
 function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
 {
-  console.log(sTag);
-  console.log('props', JSON.stringify(dctProps));
-  console.log('children', JSON.stringify(arrChildren));
-  console.log('-----------------');
+  //console.log(sTag);
+  //console.log('props', JSON.stringify(dctProps));
+  //console.log('children', JSON.stringify(arrChildren));
+  //console.log('-----------------');
 
   const isCollection = dctProps?.trait && dctProps.trait !== 'item';
 
@@ -138,12 +138,20 @@ const DOMAttrMap: any =
 // Finds the index of a collection element, given any child in it
 function getIndex(elem: any): number
 {
-  // Keep moving up the dom tree till we find the top most elem with the _index property
-  // or the collection component itself with _trait
-  // We can hit the second condition if the event is on the collection component itself
-  // and then the return index is null
-  while(elem && elem._trait == null && elem._index == null) elem = elem?.parentElement;
-  return elem._index;
+  // First find the element which maps to the collection component by walking up the tree
+  // This element will have the _comp property
+  // Also keep track of the the element which was the direct child of the collection component
+  let elemComp = elem, elemChild;
+  while(elemComp && !elemComp._comp)
+  {
+    elemChild = elemComp;
+    elemComp = elemComp.parentElement;
+  }
+
+  // Now elemChild is the top level ref for the item and elemComp is the collection component
+  // Lookup the index of elemChild in the _refs array of the collection component
+  // unlike refs, _refs has a flat array of all the top level children of the component
+  return firstDictVal(elemComp._comp)._refs.indexOf(elemChild);
 }
 
 
@@ -158,7 +166,8 @@ function attachSignalHandlers(dctProps: Dict, element: HTMLElement, path: string
     if(signal.startsWith('item.'))
     {
       // Item signals will send their index as the data
-      element.addEventListener(
+      element.addEventListener
+      (
         signal.split('.')[1],
         evt => (evt.target !== element) && emit(sSignalName, getIndex(evt.target)),
       );
@@ -171,10 +180,10 @@ function attachSignalHandlers(dctProps: Dict, element: HTMLElement, path: string
 }
 
 // Set the properties for an element when planting
-function handleProps(dctProps: Dict, element: any, path: string)
+function handleProps(comp: Component, dctProps: Dict, element: any, path: string)
 {
   // Kind sets the classname(s)
-  if(dctProps.kind) element.className = dctProps?.kind;
+  if(dctProps.class) element.className = dctProps?.class;
 
   // Span is the flexGrow, can be 0 to override with fixed size
   if(dctProps.span != null) element.style.flexGrow = String(dctProps.span);
@@ -183,7 +192,11 @@ function handleProps(dctProps: Dict, element: any, path: string)
   if(dctProps.text) element.innerText = dctProps.text;
 
   // We need to save the trait property on the element itself
-  if(dctProps.trait) element._trait = dctProps.trait;
+  if(dctProps.trait)
+  {
+    element._trait = dctProps.trait;
+    element._comp = comp;
+  }
 
   // Signals and data binding
   if(dctProps.signals) attachSignalHandlers(dctProps, element, path);
@@ -203,7 +216,7 @@ function handleProps(dctProps: Dict, element: any, path: string)
 }
 
 
-function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = ''): ComponentMap
+function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '', elemInsertBefore = null): ComponentMap
 {
   for(const sKey in dct)
   {
@@ -218,7 +231,7 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '
 
     //console.log(element, path);
 
-    handleProps(dctProps, element, path);
+    handleProps(dct, dctProps, element, path);
 
     // Recursively process children
     for(const prop in dctProps)
@@ -244,7 +257,7 @@ function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '
     }
 
     // Attach the element to the site
-    elemSite.appendChild(element);
+    elemSite.insertBefore(element, elemInsertBefore);
   }
 
   // Return the first element of the tree (used to save the top level element as the application object)
@@ -306,6 +319,8 @@ class List<T>
   // place holder for slots - TODO: Why not make all the methods slots
   public slots: any;
 
+  emitSelCurrent = (b: boolean) => (this._selected >= 0 &&  emit(`${this._name}.sel`, {index: this._selected, selected: b}));
+
   constructor(name: string)
   {
     this._name = name;
@@ -314,20 +329,17 @@ class List<T>
       // Single select slot
       doSelect: (index: number) =>
       {
+        index = index ?? -1;
         if(this._selected !== index)
         {
-          // Emit a signal to deselect the current selection
-          if(this._selected >= 0)
-            emit(`${this._name}.sel`, {index: this._selected, selected: false});
-
-          // Emit a signal to select the new item
+          // Emit a signal to deselect the current selection, then emit a signal to select the new index if valid
+          this.emitSelCurrent(false);
           this._selected = index;
-          emit(`${this._name}.sel`, {index, selected: true});
+          this.emitSelCurrent(true);
         }
       }
     }
   }
-
 
   get name(): string {return this._name;}
 
@@ -338,11 +350,23 @@ class List<T>
     return this._data[this._selected];
   }
 
-  public add(item: T): void
+  get selectedIdx(): number
   {
-    this._data.push(item);
-    const ii: IndexedItem = {item, index: this._data.length - 1};
+    return this._selected;
+  }
+
+  public add(item: T, idxBefore: any = null): void
+  {
+    // Insert at index idx or end if not specified
+    idxBefore = idxBefore ?? -1;
+    const index = idxBefore >= 0 ? idxBefore : this._data.length;
+    this._data.splice(index, 0, item);
+    const ii: IndexedItem = {item, index};
+
+    // Deselect the current selection if any and reselect later
+    this.emitSelCurrent(false);
     emit(`${this._name}.+`, ii);
+    this.emitSelCurrent(true);
   }
 
   public set(index: number, item: T): void
@@ -383,7 +407,7 @@ function bindList(comp: Component, list: List<any>)
     {
       const child = dct[key];
       if(child.ref) refs[key] = {ref: child.ref};
-      if(child.tag || child.kind) Object.assign(refs[key], getChildRefs(child));
+      if(child.tag || child.class) Object.assign(refs[key], getChildRefs(child));
     }
     return refs;
   }
@@ -397,37 +421,69 @@ function bindList(comp: Component, list: List<any>)
     }
   }
 
+  const selectIfValid = (b: boolean) =>
+  {
+    const idxSelected = comp.data?.selectedIdx ?? -1;
+    if(idxSelected >= 0 && idxSelected < comp.refs.length)
+    {
+      emit(`${name}.sel`, {index: idxSelected, selected: b});
+    }
+  }
+
+
   // Add an element to the list
   const addElem = (data: IndexedItem) =>
   {
+    // Save the ref in the refs array at the same index
+    if(!comp.refs) comp.refs = [];
+
     // Get the template and make the DOM element, set all properties, add to the parent, save ref
     const elem = document.createElement(template.tag);
 
-    // Inserting an element into the dom tree is slow unless it is at the end
-    // We always need to update the dataset.index property of all elements below the new one
-    // It seems from benchmarks that we may as well append at the end, and update all the elements from the
-    // insertion point
+    // If there was anything selected, deselect it
+    selectIfValid(false);
 
-    elem._index = data.index;
-    comp.ref.appendChild(elem);
-    addToDictArray(comp, 'refs', elem);
+    // Insert the element at the correct index amd its ref
+    const index = data.index;
+    const ref = comp.refs[index];
+    comp.ref.insertBefore(elem, ref);
+    comp.refs.splice(index, 0, elem);
     setData(data, comp);
+
+    // Duplicate the refs array as _refs  to match the _refs used for component collections
+    comp._refs = comp.refs;
+
+    // If there was anything selected, reselect it
+    selectIfValid(true);
   }
 
   const addComp = (data: IndexedItem) =>
   {
-    // Inject parent path into the item
-    const tag = {...template.tag};
-    //tag[Object.keys(tag)[0]].parent = comp.ref.dataset.path;
+    // We need to store refs of the the top level children of this component in an array _refs
+    // We also need to store the nested refs for the user under the refs array
+    if(!comp._refs) comp._refs = [];
+    if(!comp.refs) comp.refs = [];
+
+    // If there was anything selected, deselect it
+    selectIfValid(false);
+
+    // Get the top level ref of the item at the insert index
+    const index = data.index;
+    const ref = comp._refs[index];
 
     // Plant the dom subtree, then save the refs of all children in a tree
-    plantDOMTree(tag, comp.ref, comp.ref.dataset.path);
+    const tag = {...template.tag};
+    const compMain = plantDOMTree(tag, comp.ref, comp.ref.dataset.path, ref);
     const childRefs = getChildRefs(template.tag);
-    addToDictArray(comp, 'refs', childRefs);
 
-    // Get the top level element and save the index into it
-    firstDictVal(comp.refs[data.index]).ref._index = data.index;
+    // Add the nested refs and the flat refs to respective arrays
+    comp.refs.splice(index, 0, childRefs);
+    comp._refs.splice(index, 0, compMain.ref);
+
     setData(data, comp);
+
+    // If there was anything selected, reselect it
+    selectIfValid(true);
   }
 
   const delElem = (index: number) =>
@@ -441,7 +497,7 @@ function bindList(comp: Component, list: List<any>)
   wire(`${name}.+`, isComp? addComp: addElem);
   wire(`${name}.-`, delElem);
 
-  if( comp.selector)
+  if(comp.selector)
   {
     wire(`${name}.sel`, item => comp.selector(comp.refs[item.index], item.selected));
   }

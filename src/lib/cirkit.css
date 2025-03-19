@@ -63,3 +63,11 @@ div
   flex-shrink: 1;
   flex-basis: 0;
 }
+
+.vscroll {
+  overflow-y: auto;
+}
+
+.hscroll {
+  overflow-x: auto;
+}
