@@ -326,9 +326,9 @@ Just run `npm run build` to build the demo project and then use `npm run serve` 
 
 ---
 
-That's all for now 
+That's all for now!!
 
-![Have a look at the demo here](todo.mp4)
+![Watch the demo video]([https://i.sstatic.net/Vp2cE.png](https://github.com/user-attachments/assets/3d7bd25d-9c87-4473-a9dd-3ba926385db9))
 
 ---
 
