@@ -316,6 +316,22 @@ In ths JSX above the `signals` property in both the collection components have t
 
 ---
 
+### Building 
+
+There is no complex build or packaging system for Cirkit - it is a single file that can be included in your project.
+
+The build step is simply to run the TypeScript compiler on the source files to generate JS files and add the skeleton `index.html` and `cirkit.css` files to the dist folder
+
+Just run `npm run build` to build the demo project and then use `npm run serve` to start a local server to view the demo
+
+---
+
+That's all for now 
+
+![Have a look at the demo here](todo.mp4)
+
+---
+
 ## Roadmap
 
 Several features, big and small are planned
@@ -330,6 +346,8 @@ Several features, big and small are planned
 - **Batch updates** - To allow multiple updates to be batched into a single DOM update
 - **Complete reference documentation and usage guide**
 - **RAD style UI designer** - This is a big one
+- **Minified and precompiled version**
+- **Type checking and error handling**
 
 ----
 
