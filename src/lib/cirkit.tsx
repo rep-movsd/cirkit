@@ -1,11 +1,213 @@
 /** @jsx h */
 
-type ComponentTrait = 'list'|'set'|'item';
+type ComponentTrait = 'list'|'set';
 type Dict = { [key: string]: any };
-type Component = Dict & { span?: number; path?: string, data?: Dict, bind?: string, signals?: string[]};
-type CollectionComponent = Component & { trait: ComponentTrait }
-type ComponentMap = { [key: string]: Component | CollectionComponent };
 type IndexedItem = { index: number, item: any };
+
+///////////////////////////////////////////////////////////////////////////////
+// region JSX handling
+
+// Helper types
+type StyleDict = Partial<CSSStyleDeclaration>;
+type HTMLTag = keyof HTMLElementTagNameMap;
+
+type Primitive = string | number | boolean;
+
+type HTMLAttributeProps<T> = {
+  [K in keyof T as T[K] extends Primitive ? K : never]?: T[K];
+};
+
+type NativeHTMLPropsFor<Tag extends HTMLTag> = HTMLAttributeProps<HTMLElementTagNameMap[Tag]>;
+
+
+// 'click' | 'mousedown' | 'keydown' | ...
+type DOMEventName = keyof HTMLElementEventMap;
+
+// 'item.click' | 'item.mousedown' | 'item.keydown' |
+type ItemEventName = `item.${DOMEventName}`;
+
+type ComponentEvent = DOMEventName | ItemEventName
+
+
+type ComponentProps<BindElement = any, Tag extends HTMLTag = any> = {
+  /*
+  The `tag` property specifies which HTML element to use for the component.
+
+  You can specify it as:
+    - A string with the HTML tag name
+
+        `tag='elem'`
+
+    - An element as a component property
+
+        `tag={<elem ... />}`
+
+    - As a child in the JSX
+
+        `<tag><elem ... /></tag>`
+  */
+  elem?: Tag;
+
+  /* `class` specifies the CSS class(es) to apply to the component.*/
+  class?: string;
+
+  /* `trait` specifies if this component is a collection container. */
+  trait?: ComponentTrait;
+
+  /* `bind` specifies `List<BindElement>` object that is tied to this collection component.
+
+  The children of the collection component will be automatically synchronized with the items in the list when the list is modified.
+  * */
+  bind?: List<BindElement>;
+
+  /*
+  `span` specifies the `flex-grow` proportion for the component within its Hbox or VBox parent.
+
+  For example:
+    ```
+    <box class='HBox'>
+      <box1 span={1} />
+      <box2 span={2} />
+      <box3 span={4} />
+    </box>
+    ```
+  This will set the proportions of the three boxes to `1:2:4`.
+
+  If you need to override the dimension via styles, set this to 0.
+  */
+  span?: number;
+
+  /* The **style** property is simply the CSS style */
+  style?: StyleDict;
+
+  /*
+  The **selector** property specifies the function that is called when an item in a collection component is selected.
+
+  The `List<BindElement>` bound to the component has a slot **doSelect**, which will call the selector function with the selected item and selection state.
+
+  Note that any current selection will be deselected, before the new one is selected - meaning the selector is called twice - once with `false` and then with `true`.
+
+  * *Multiple selection is not supported yet*
+  */
+  selector?: DOMPropUpdaterFactory;
+
+  /*
+  `signals` specifies the DOM events that will emit signals when they occur.
+  The emitted signal name is the path to the component, followed by the event name.
+
+  Apart from the standard DOM events, you can also specify item events, which are prefixed with `item.`
+
+  Item event signals will have a name of the form `<path>.item.<event>` where <path> is the path to the collection component and <event> is the event name.
+  The index of the child item that sent the event is passed as the signal data.
+
+  For example, if the collection component is `todos` and the event is `click`, then the signal name will be `todos.item.click`.
+  * */
+  signals?: ComponentEvent[];
+
+  [key: string]: any;
+};
+
+
+type GenericUpdater = {[elemName: string]: DOMPropUpdaterFactory}
+
+type ItemComponentProps =
+{
+  tag?: HTMLTag,
+  setter?: GenericUpdater;
+  template?: ComponentProps;
+}
+
+export type Updater<T> = { [K in keyof T]?: DOMPropUpdaterFactory; };
+
+declare namespace h.JSX
+{
+  interface IntrinsicElements
+  {
+    'item-template': ItemComponentProps;
+    [elemName: string]: ComponentProps;
+  }
+}
+
+type Component =
+  {'item-template'?: ItemComponentProps} &
+  {[elemName: string]: ComponentProps}
+
+
+//const HTMLTags = Object.keys({[key in keyof HTMLElementTagNameMap]: true}) as HTMLTag[];
+
+// Our custom hyperscript function.
+// It builds a nested dictionary of components and their properties
+// component names are left unchanged, so that they can be used as tags
+// property names get an _ prefix
+
+function h(sTag: string, dctProps: ComponentProps, ...arrChildren: Component[]): any
+{
+  //console.log(sTag);
+  //console.log('props', JSON.stringify(dctProps));
+  //console.log('children', JSON.stringify(arrChildren));
+  //console.log('-----------------');
+
+  // Process children into an object.
+  let dctChildObject: Component = {};
+  const processChild = (child: any) =>
+  {
+    // Skip null values
+    if(child !== null)
+    {
+      // Plain strings become _label which will be rendered as static text
+      if(typeof child === 'string')
+      {
+        if(!dctProps) dctProps = {};
+        dctProps.label = child;
+      }
+      else
+      {
+        const sChildKey = Object.keys(child)[0];
+        dctChildObject[sChildKey] = child[sChildKey];
+      }
+    }
+  };
+
+  // A list collection element will have a template property used to create the children
+  const isCollection = !!dctProps?.trait;
+  if(isCollection)
+  {
+    const itemTemplateNode = arrChildren[0];
+    const keys = Object.keys(itemTemplateNode);
+    if(keys.length !== 1 || keys[0] !== 'item-template')
+    {
+      throw new Error('Collection component must have a single item-template child');
+    }
+    dctProps.template = Object.values(arrChildren[0])[0];
+  }
+  else
+  {
+    // Iterate over children.
+    for(const child of arrChildren)
+    {
+      // Recursively process children arrays
+      if(Array.isArray(child))
+        child.forEach(processChild);
+      else
+        processChild(child);
+    }
+  }
+
+  // Merge remaining props with the children object, but add _ prefix to the property names
+  const dctRet: any = {...dctChildObject};
+  if(dctProps)
+  {
+    for(const [key, value] of Object.entries(dctProps))
+    {
+      dctRet[`_${key}`] = value;
+    }
+  }
+  return {[sTag]: {...dctRet}};
+}
+
+// endregion JSX handling
+///////////////////////////////////////////////////////////////////////////////
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // region Signal and Slot handling
@@ -68,72 +270,17 @@ const dispatch = () =>
 // endregion Signal and Slot handling
 ///////////////////////////////////////////////////////////////////////////////
 
-///////////////////////////////////////////////////////////////////////////////
-// region JSX handling
-
-// Allow any string as a tag name for our JSX
-declare namespace h.JSX
-{
-  interface IntrinsicElements {[elemName: string]: any;}
-}
-
-// These are special properties that are objects and should not be treated as children
-const SpecialAttr = ['ref', 'style', 'signals', 'selector', 'bind', 'template'];
-
-
-// Our custom hyperscript function.
-// It builds a nested dictionary of components and their properties.
-function h(sTag: string, dctProps: any, ...arrChildren: any[]): any
-{
-  //console.log(sTag);
-  //console.log('props', JSON.stringify(dctProps));
-  //console.log('children', JSON.stringify(arrChildren));
-  //console.log('-----------------');
-
-  const isCollection = dctProps?.trait && dctProps.trait !== 'item';
-
-  // Process children into an object.
-  let dctChildObject: { [key: string]: any } = {};
-  const processChild = (child: any) =>
-  {
-    // Skip null values and plain strings.
-    if(!child || typeof child === 'string') return;
-    const sChildKey = Object.keys(child)[0];
-    dctChildObject[sChildKey] = child[sChildKey];
-  };
-
-  // A list collection element will have a template property and a selection helper
-  if(isCollection)
-  {
-    dctProps.template = Object.values(arrChildren[0])[0];
-  }
-  else
-  {
-    // Iterate over children.
-    for(const child of arrChildren)
-    {
-      // Recursively process children arrays
-      if(Array.isArray(child))
-        child.forEach(processChild);
-      else
-        processChild(child);
-    }
-  }
-
-  // Merge remaining props with the children object
-  return {[sTag]: {...dctProps, ...dctChildObject}};
-}
-
-// endregion JSX handling
-///////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////
 // region DOM handling
-const DOMAttrMap: any =
-{
-  'input': ['placeholder'],
-};
 
+
+// Map type for the parsed component tree with prefix _ on all properties
+type ComponentDOMDict =
+  {[Key in keyof ComponentProps as `_${Key}`]: ComponentProps[Key]} &
+  {_template?: ItemComponentProps, refs?: any, ref? : HTMLElement, };
+
+type HTMLComponent = HTMLElement & {'_trait'?: ComponentTrait, '_comp'?: Component};
 
 // Finds the index of a collection element, given any child in it
 function getIndex(elem: any): number
@@ -154,110 +301,135 @@ function getIndex(elem: any): number
   return firstDictVal(elemComp._comp)._refs.indexOf(elemChild);
 }
 
-
 // Attaches event handlers to the element that emit signals
 // We can prefix signal names with 'item.' to indicate that the signal is on the item
-function attachSignalHandlers(dctProps: Dict, element: HTMLElement, path: string)
+function attachSignalHandlers(dctProps: ComponentDOMDict, element: HTMLElement, path: string)
 {
-  for(const signal of dctProps.signals)
+  if(dctProps?._signals)
   {
-    // Item signal handlers are attached to the parent rather than to each item
-    const sSignalName = path + '.' + signal;
-    if(signal.startsWith('item.'))
+    for(const signal of dctProps._signals)
     {
-      // Item signals will send their index as the data
-      element.addEventListener
-      (
-        signal.split('.')[1],
-        evt => (evt.target !== element) && emit(sSignalName, getIndex(evt.target)),
-      );
-    }
-    else
-    {
-      element.addEventListener(signal, evt => emit(sSignalName, evt));
+      // Item signal handlers are attached to the parent rather than to each item
+      const sSignalName = path + '.' + signal;
+      if(signal.startsWith('item.'))
+      {
+        // Item signals will send their index as the data
+        element.addEventListener
+        (
+          // Remove the item. prefix from the signal name
+          signal.split('.')[1],
+
+          // This event handler will be called twice - once for the collection element and once for the item
+          // Only send signal if the event target is the parent collection element
+          evt => (evt.target !== element) && emit(sSignalName, getIndex(evt.target)),
+        );
+      }
+      else
+      {
+        element.addEventListener(signal, evt => emit(sSignalName, evt));
+      }
     }
   }
 }
 
 // Set the properties for an element when planting
-function handleProps(comp: Component, dctProps: Dict, element: any, path: string)
+function handleProps(comp: Component, dctProps: ComponentDOMDict, elem: HTMLComponent, sPath: string)
 {
-  // Kind sets the classname(s)
-  if(dctProps.class) element.className = dctProps?.class;
+  if(dctProps?._class) elem.className = dctProps._class;
 
   // Span is the flexGrow, can be 0 to override with fixed size
-  if(dctProps.span != null) element.style.flexGrow = String(dctProps.span);
+  if(dctProps?._span) elem.style.flexGrow = String(dctProps._span);
 
-  // Text just sets the innerText statically
-  if(dctProps.text) element.innerText = dctProps.text;
-
-  // We need to save the trait property on the element itself
-  if(dctProps.trait)
+  // We need to save the trait and component properties into the HTML element itself
+  if(dctProps?._trait)
   {
-    element._trait = dctProps.trait;
-    element._comp = comp;
+    elem._trait = dctProps._trait;
+    elem._comp = comp;
   }
 
+  // If label exists, set the innerText
+  if(dctProps?._label) elem.innerText = dctProps._label;
+
   // Signals and data binding
-  if(dctProps.signals) attachSignalHandlers(dctProps, element, path);
-  if(dctProps.bind) bindList(dctProps, dctProps.bind);
+  if(dctProps._signals) attachSignalHandlers(dctProps, elem, sPath);
+  if(dctProps._bind) bindList(dctProps, dctProps._bind);
 
   // copy all the style properties into the element style
-  if(dctProps.style)
+  if(dctProps._style)
   {
-    for(const [prop, value] of Object.entries(dctProps.style))
+    for(const [prop, value] of Object.entries(dctProps._style))
     {
-      element.style.setProperty(prop, value as string);
+      (elem.style as any)[prop] = value;
     }
   }
 
   // Save the ref in the component object
-  dctProps.ref = element;
+  dctProps._ref = elem;
+}
+
+function createTagElem(tag: string | Dict)
+{
+  // If it is a string, create the element with that tag
+  if(typeof tag === 'string')
+  {
+    return document.createElement(tag);
+  }
+
+  // If its an object, it could be a component or an intrinsic element
+  // Get the first key in the object and try creating it
+  const tagName = Object.keys(tag)[0];
+  let elem = document.createElement(tagName);
+  if(elem.toString() == "[object HTMLUnknownElement]")
+  {
+    throw new Error(`Unknown HTML element ${tagName}`);
+  }
+  // Iterate over the tag properties and assign them to the element
+  for(let i = 1; i < Object.keys(tag).length; i++)
+  {
+    const key = Object.keys(tag)[i];
+    (elem as any)[key] = tag[key];
+  }
+  return elem;
 }
 
 
-function plantDOMTree(dct: ComponentMap, elemSite: HTMLElement, path: string = '', elemInsertBefore = null): ComponentMap
+function plantDOMTree(dct: Component, elemSite: HTMLElement, sPath: string = '', elemInsertBefore = null): Component
 {
   for(const sKey in dct)
   {
-    const dctProps: Dict = dct[sKey];
-    let tagName: string = dctProps.tag || 'div';
-    let element: HTMLElement;
-    element = document.createElement(tagName);
+    const dctChildren: ComponentDOMDict = dct[sKey];
+    let elem: HTMLElement = createTagElem(dctChildren._tag || 'div');
 
     // Save the path
-    path = path ? (elemSite.dataset.path + '.' + sKey) : sKey;
-    element.dataset.path = path;
-
-    //console.log(element, path);
-
-    handleProps(dct, dctProps, element, path);
+    sPath = sPath ? (elemSite.dataset.path + '.' + sKey) : sKey;
+    elem.dataset.path = sPath;
+    handleProps(dct, dctChildren, elem, sPath);
 
     // Recursively process children
-    for(const prop in dctProps)
+    for(const name in dctChildren)
     {
-      const child: any = dctProps[prop];
+      const child: any = (dctChildren as Dict)[name];
 
       // Skip special props
-      if(!SpecialAttr.includes(prop))
+      if(name[0] !== '_')
       {
         // If the child is an object, and not a special property, then it is a child component
         if(typeof child === "object")
         {
           if(Array.isArray(child))
-            child.forEach(item => plantDOMTree({[prop]: item}, element, path));
+            child.forEach(item => plantDOMTree({[name]: item}, elem, sPath));
           else
-            plantDOMTree({[prop]: child}, element, path);
+            plantDOMTree({[name]: child}, elem, sPath);
         }
-        else if(typeof child === "string" && DOMAttrMap[tagName]?.includes(prop))
+        else if(typeof child === "string")
         {
-          element.setAttribute(prop, child);
+          elem.innerText = child;
         }
       }
     }
 
     // Attach the element to the site
-    elemSite.insertBefore(element, elemInsertBefore);
+    elemSite.insertBefore(elem, elemInsertBefore);
   }
 
   // Return the first element of the tree (used to save the top level element as the application object)
@@ -283,9 +455,13 @@ export function getPropPathRef(comp: any, path: string): any
   return [target, arrPath.pop()];
 }
 
+
+type DOMPropUpdater = (target: HTMLElement|Component, propName: string, value: any) => void;
+type DOMPropUpdaterFactory = (comp: any, value: any) => void;
+
 // Helper to make updater functions for style attribute, classname or property
-const makeUpdater = ( prop: string, apply: (target: any, propName: string, value: any) => void) => {
-  return (comp: any, value: any) =>
+const makeUpdater = ( prop: string, apply: DOMPropUpdater): DOMPropUpdaterFactory => {
+  return (comp: any, value: string|number) =>
   {
     const [target, propName] = getPropPathRef(comp, prop);
     apply(firstDictVal(target)?.ref || target.ref || target, propName, value);
@@ -293,10 +469,11 @@ const makeUpdater = ( prop: string, apply: (target: any, propName: string, value
 };
 
 // Updater functions for setting properties, styles, attributes and classnames for components
-const setProp = (prop: string) => makeUpdater(prop, (target, propName, value) => target[propName] = value);
-const setStyle = (prop: string) => makeUpdater(prop, (target, propName, value) => target.style[propName] = value);
+const setProp = (prop: string) => makeUpdater(prop, (target, propName, value) => (target as any)[propName] = value);
+const setStyle = (prop: string) => makeUpdater(prop, (target, propName, value) => (target.style as any)[propName] = value);
 const setClass = (prop: string) => makeUpdater(prop, (target, propName, value) => target.classList.toggle(propName, value));
-const setAttr = (prop: string) => makeUpdater(prop, (target, propName, value) => target.setAttribute(propName , value));
+const setAttr = (prop: string) => makeUpdater(prop,  (target, propName, value: string) => (target as HTMLElement).setAttribute(propName, value));
+
 
 // endregion DOM handling
 ///////////////////////////////////////////////////////////////////////////////
@@ -388,12 +565,12 @@ class List<T>
 }
 
 // Connects the collection component to the list
-function bindList(comp: Component, list: List<any>)
+function bindList(comp: ComponentDOMDict, list: List<any>)
 {
-  console.assert(comp.trait, 'Collection components must have a trait property');
+  console.assert(comp._trait != null, 'Collection components must have a trait property');
 
   const name = list.name;
-  const template = comp.template;
+  const template = comp._template as ItemComponentProps;
 
   // Components have tag as a JSX parsed Object
   const isComp = typeof template.tag == 'object';
@@ -415,16 +592,19 @@ function bindList(comp: Component, list: List<any>)
   // Applies the updater functions to the element for each key in data
   const setData = (data: IndexedItem, elem: any) =>
   {
-    for(const key of Object.keys(data.item))
+    if(template.setter)
     {
-      template[key](elem.refs[data.index], data.item[key]);
+      for(const key of Object.keys(data.item))
+      {
+        template.setter[key](elem.refs[data.index], data.item[key]);
+      }
     }
   }
 
   const selectIfValid = (b: boolean) =>
   {
-    const idxSelected = comp.data?.selectedIdx ?? -1;
-    if(idxSelected >= 0 && idxSelected < comp.refs.length)
+    const idxSelected = comp._bind?.selectedIdx ?? -1;
+    if(idxSelected >= 0 && idxSelected < comp._refs.length)
     {
       emit(`${name}.sel`, {index: idxSelected, selected: b});
     }
@@ -438,7 +618,15 @@ function bindList(comp: Component, list: List<any>)
     if(!comp.refs) comp.refs = [];
 
     // Get the template and make the DOM element, set all properties, add to the parent, save ref
-    const elem = document.createElement(template.tag);
+    let elem: HTMLElement;
+    if(typeof template.tag == 'string')
+    {
+      elem = document.createElement(template.tag)
+    }
+    else
+    {
+      throw new Error('Template tag must be a string');
+    }
 
     // If there was anything selected, deselect it
     selectIfValid(false);
@@ -446,7 +634,7 @@ function bindList(comp: Component, list: List<any>)
     // Insert the element at the correct index amd its ref
     const index = data.index;
     const ref = comp.refs[index];
-    comp.ref.insertBefore(elem, ref);
+    comp.ref?.insertBefore(elem, ref);
     comp.refs.splice(index, 0, elem);
     setData(data, comp);
 
@@ -457,10 +645,11 @@ function bindList(comp: Component, list: List<any>)
     selectIfValid(true);
   }
 
+  /*
   const addComp = (data: IndexedItem) =>
   {
     // We need to store refs of the the top level children of this component in an array _refs
-    // We also need to store the nested refs for the user under the refs array
+    // We also need to store the nested refs so the user code can access them  under the refs array
     if(!comp._refs) comp._refs = [];
     if(!comp.refs) comp.refs = [];
 
@@ -472,7 +661,7 @@ function bindList(comp: Component, list: List<any>)
     const ref = comp._refs[index];
 
     // Plant the dom subtree, then save the refs of all children in a tree
-    const tag = {...template.tag};
+    const tag = {...(template.tag as ComponentProps)};
     const compMain = plantDOMTree(tag, comp.ref, comp.ref.dataset.path, ref);
     const childRefs = getChildRefs(template.tag);
 
@@ -484,22 +673,24 @@ function bindList(comp: Component, list: List<any>)
 
     // If there was anything selected, reselect it
     selectIfValid(true);
-  }
+  }*/
+
 
   const delElem = (index: number) =>
   {
     const elem = comp.refs[index];
-    comp.ref.removeChild(elem);
+    comp.ref?.removeChild(elem);
     comp.refs.splice(index, 1);
   }
 
   // Connect the list signals to corresponding ones here
-  wire(`${name}.+`, isComp? addComp: addElem);
-  wire(`${name}.-`, delElem);
+  //wire(`${name}.+`, isComp? addComp: addElem);
+  //wire(`${name}.-`, delElem);
 
-  if(comp.selector)
+  const selector = comp._selector;
+  if(selector)
   {
-    wire(`${name}.sel`, item => comp.selector(comp.refs[item.index], item.selected));
+    wire(`${name}.sel`, item => (selector as DOMPropUpdaterFactory)(comp.refs[item.index], item.selected));
   }
 }
 
@@ -528,6 +719,6 @@ export function addSlot(comp:any, name: string, func: any)
 ///////////////////////////////////////////////////////////////////////////////
 
 
-export {Dict, ComponentMap, Component, CollectionComponent, IndexedItem, List};
+export {Dict, Component, IndexedItem, List};
 export {wire, emit, SignalName, Slot};
 export {h, plantDOMTree, setProp, setStyle, setClass};
