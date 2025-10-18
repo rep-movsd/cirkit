@@ -1,5 +1,6 @@
 /** @jsx h */
 import type {JSX as ReactJSX} from 'react';
+import {emit} from './cirkit-junction.js';
 
 declare global
 {
@@ -26,10 +27,8 @@ export function h(tag: string, props: any, ...children: any[]): JSXElement
 export type CKTLayoutType =
 | 'HBox'
 | 'VBox'
-| `HBox/${number}/${number}`
-| `VBox/${number}/${number}`
-| `${number}/${number}`;
-
+| `HBox/${number}`
+| `VBox/${number}`;
 
 // Internal system-reserved keys
 type InternalKey = 'elem' | 'item';
@@ -48,7 +47,7 @@ export type CKTComponentElem = {
   ref?: HTMLElement;
   props?: Partial<HTMLDivElement>;
   style?: Partial<CSSStyleDeclaration>;
-  layout: CKTLayoutType;
+  layout?: CKTLayoutType;
   signal?: SignalMap;
 }
 
@@ -63,6 +62,8 @@ export type CKTComponentDef =
 & CKTNativeElem
 & CKTComponentElem
 
+
+// Given a list of signal names, return an object mapping each signal name to null
 export function $signal<T extends readonly SignalName[]>(
 ...signals: T
 ): { [K in T[number]]: null }
@@ -75,33 +76,30 @@ export function $signal<T extends readonly SignalName[]>(
   return result;
 }
 
-
-///////////////
-
-
 export type ExtractComps<T> = {
   // Only allow keys that start with $ and are not InternalKey
   [K in keyof T as K extends CKTComponentName ? K : never]:
   T[K] extends object
   ?
-  // Recursively extract components
-  & ExtractComps<T[K]>
-  // Add $$ref and $$path for all components
-  & { $$ref: HTMLElement | null; $$path: string;}
-  // Add $$data if the component has an item property
-  & (T[K] extends { item?: any } ? { $$data: any } : {})
-  // Add $$signal if the component has a signal property
-  & (T[K] extends { signal: infer S } ? { $$signal: { [K in keyof S]: string } } : {})
+    // Recursively extract components
+    & ExtractComps<T[K]>
+
+    // Add $$ref and $$path for all components
+    & { $$ref: HTMLElement | null; $$path: string; }
+
+    // Add $$data if the component has an item property
+    & (T[K] extends { item?: any } ? { $$data: any } : {})
+
+    // Add $$signal if the component has a signal property
+    & (T[K] extends { signal: infer S } ? { $$signal: { [K in keyof S]: string } } : {})
   :
-  T[K];
+    T[K];
 };
 
 
-export function buildTree<T extends object>(
-app: T,
-sPath = '',
-first = true,
-): ExtractComps<T> & { $$path: string }
+// Given an app definition, build a same shaped UI tree object with reference to each component
+// and $$ref, $$path, $$data, and $$signal to each component node
+export function buildTree<T extends object>(app: T, sPath = '', first = true): ExtractComps<T> & { $$path: string }
 {
   const result: any = {$$path: sPath};
 
@@ -111,25 +109,34 @@ first = true,
 
     if(key.startsWith('$') && typeof child === 'object' && child)
     {
-      // Get the dotted path and recursively build the tree
       const currentPath = sPath ? `${sPath}.${key}` : key;
+
       const node: any = buildTree(child as object, currentPath, false);
 
-      // Add the ref and the path itself
-      node.$$ref = (child as any).ref ?? (null as unknown as HTMLElement);
+      // Attach $$ref
+      node.$$ref = (child as any).ref ?? null;
+
+      // Attach $$path
       node.$$path = currentPath;
 
-      // Assign the complete signal pathname string to each signal entry
+      // Attach $$signal and wire event listeners
       if('signal' in child && typeof child.signal === 'object')
       {
         node.$$signal = {};
+
         for(const signalKey in child.signal)
         {
-          node.$$signal[signalKey] = `${currentPath}.${signalKey}`;
+          const signalPath = `${currentPath}.${signalKey}`;
+          node.$$signal[signalKey] = signalPath;
+
+          if(node.$$ref)
+          {
+            node.$$ref.addEventListener(signalKey, () => emit(signalPath, node.$$ref));
+          }
         }
       }
 
-      // Expose $$data as the placeholder for the List<T> binding
+      // Attach $$data if it's a collection
       if('item' in child)
       {
         node.$$data = null;
@@ -143,9 +150,36 @@ first = true,
 }
 
 
+function handleLayout(comp: any) {
+  const layout: CKTLayoutType = comp.layout;
+  if(layout)
+  {
+    const arrLayout = layout.split('/');
 
-export function renderApp(app: any)
+    // Put the layout class into className
+    const layoutType = arrLayout.shift();
+    if(!comp.elem.props.className)
+      comp.elem.props.className = layoutType;
+    else
+      comp.elem.props.className += ` ${layoutType}`;
+
+    // TODO: Handle other layout types
+    // Handle <class>/num or <class>
+    if(arrLayout.length == 1)
+    {
+      const flexGrow = arrLayout[0];
+      if(flexGrow)
+      {
+        if(!comp.elem.props.style) comp.elem.props.style = {};
+        comp.elem.props.style.flexGrow = Number(flexGrow) | 0;
+      }
+    }
+  }
+}
+
+export function renderApp(appdef: CKTComponentDef)
 {
+
   function setProps(elem: HTMLElement, props: any)
   {
     if(props)
@@ -206,32 +240,7 @@ export function renderApp(app: any)
     }
 
     if(!comp.elem.props) comp.elem.props = {};
-
-    // Handle the layout property
-    const layout = comp.layout;
-    if(layout)
-    {
-      const arrLayout = layout.split('/');
-
-      // Handle <class>/num/denom or <class>
-      if(arrLayout.length !== 2)
-      {
-        const layoutType = arrLayout[0];
-        if(!comp.elem.props.className)
-          comp.elem.props.className = layoutType;
-        else
-          comp.elem.props.className += ` ${layoutType}`;
-
-        arrLayout.shift();
-      }
-
-      const flexGrow = arrLayout[0];
-      if(flexGrow)
-      {
-        if(!comp.elem.props.style) comp.elem.props.style = {};
-        comp.elem.props.style.flexGrow = Number(flexGrow) | 0;
-      }
-    }
+    handleLayout(comp);
   }
 
   function renderNode(comp: any, elemParent: any, bTopLevel = false)
@@ -260,9 +269,16 @@ export function renderApp(app: any)
     }
   }
 
-  renderNode(app, document.body, true);
-}
+  function cloneElem(x: any) {
 
+  }
+
+  const app = JSON.parse(JSON.stringify(appdef));
+
+  renderNode(app, document.body, true);
+
+  return app;
+}
 
 
 const $ = (comp: any) => comp?.$$ref;

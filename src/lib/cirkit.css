@@ -24,6 +24,11 @@ div
   padding: .01in;
 }
 
+hr {
+  margin: 0.01in;
+  padding: 0;
+}
+
 .app
 {
   width:100%;
