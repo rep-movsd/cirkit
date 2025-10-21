@@ -10,7 +10,7 @@ declare global
   }
 }
 
-type JSXElement = {
+export type JSXElement = {
   tag: string;
   props?: any;
   children?: any[];
@@ -29,6 +29,8 @@ export type CKTLayoutType =
 | 'VBox'
 | `HBox/${number}`
 | `VBox/${number}`;
+
+export type CollectionKind = 'List' | null
 
 // Internal system-reserved keys
 type InternalKey = 'elem' | 'item';
@@ -51,7 +53,7 @@ export type CKTComponentElem = {
   signal?: SignalMap;
 }
 
-export type CKTNativeElem = {
+export type CKTCollectionElem = {
   [K in InternalKey]?: JSXElement;
 }
 
@@ -59,14 +61,36 @@ export type CKTNativeElem = {
 // Component node structure
 export type CKTComponentDef =
 & { [K in CKTComponentName]: CKTComponentDef | JSXElement; }
-& CKTNativeElem
+& { [K in InternalKey]?: CKTComponentDef | JSXElement }
+& { kind?: CollectionKind }
 & CKTComponentElem
 
 
+// Collection component helper
+export function CKTCollectionComponent( layout: CKTLayoutType, container: CKTComponentDef, item: JSXElement | CKTComponentDef): CKTComponentDef {
+  return {
+    ...container,
+    layout,
+    item,
+    kind: 'List'
+  } as CKTComponentDef;
+}
+
+// Plain JSX wrapper helper
+export function CKTElem(layout: CKTLayoutType, elem: JSXElement): CKTComponentDef {
+  return {layout, elem};
+}
+
+
+
+// Generic helper to apply a layout override to any component def
+export function CKTComponent<T extends CKTComponentDef>(layout: CKTLayoutType, base: T): T {
+  return { ...base, layout } as T;
+}
+
+
 // Given a list of signal names, return an object mapping each signal name to null
-export function $signal<T extends readonly SignalName[]>(
-...signals: T
-): { [K in T[number]]: null }
+export function $signal<T extends readonly SignalName[]>(...signals: T): { [K in T[number]]: null }
 {
   const result = {} as { [K in T[number]]: null };
   for(const sig of signals)
@@ -87,8 +111,9 @@ export type ExtractComps<T> = {
     // Add $$ref and $$path for all components
     & { $$ref: HTMLElement | null; $$path: string; }
 
-    // Add $$data if the component has an item property
-    & (T[K] extends { item?: any } ? { $$data: any } : {})
+    // Add $$data and $$items if the component has a kind property
+    & (T[K] extends { kind?: CollectionKind } ? { $$data: any } : {})
+    & (T[K] extends { kind?: CollectionKind } ? { $$items: any } : {})
 
     // Add $$signal if the component has a signal property
     & (T[K] extends { signal: infer S } ? { $$signal: { [K in keyof S]: string } } : {})
@@ -106,11 +131,9 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
   for(const key in app)
   {
     const child = app[key];
-
     if(key.startsWith('$') && typeof child === 'object' && child)
     {
       const currentPath = sPath ? `${sPath}.${key}` : key;
-
       const node: any = buildTree(child as object, currentPath, false);
 
       // Attach $$ref
@@ -139,11 +162,34 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
       // Attach $$data if it's a collection
       if('item' in child)
       {
-        node.$$data = null;
+        node._data = null;
       }
 
       result[key] = node;
     }
+  }
+
+
+  if((app as CKTComponentDef).kind === 'List')
+  {
+    let refItems = null;
+    function getItemsRef(comp: any)
+    {
+      if(comp.$items) return comp.$items;
+
+      for(const key in app)
+      {
+        const child = app[key];
+        if(key.startsWith('$') && typeof child === 'object' && child)
+        {
+          return getItemsRef(child);
+        }
+      }
+
+      return null
+    }
+
+    result._items = getItemsRef(app);
   }
 
   return result;
