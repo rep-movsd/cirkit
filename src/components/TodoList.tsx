@@ -1,21 +1,23 @@
-import {CKTComponentDef, CKTElem, h,  $signal} from '../lib/citkit-core.js';
+import { CKTComponentDef, h} from '../lib/citkit-core.js';
+import {FlexLayout} from '../lib/cirkit-layouts';
 
 
-export const TodoList = {
-  layout: 'VBox',
-  $frame: {
+export function TodoList() {
+  return {
+    layout: FlexLayout('VBox', [1,1,5]),
+    $frame: {
 
-    $title: CKTElem('HBox', <div>List component</div>),
+      $title: <div>List component</div>,
 
-    // Button to sort
-    $buttonSort:
-    {
-      layout: 'HBox/1',
-      elem: <button>SORT</button>,
-      signal: $signal('click', 'item.click', 'change'),
+      // Button to sort
+      $buttonSort:
+      {
+        //layout: 'HBox/1',
+        elem: <button>SORT</button>,
+        signals: ['click', 'item.click', 'change', 'keypress'],
+      },
+
+      $items: <ul/>
     },
-
-    $items: <ul/>
-  },
-
-} satisfies CKTComponentDef;
+  } satisfies CKTComponentDef;
+}

@@ -10,99 +10,66 @@ declare global
   }
 }
 
-export type JSXElement = {
+export type TJSXElement = {
   tag: string;
   props?: any;
   children?: any[];
 };
 
 
-export function h(tag: string, props: any, ...children: any[]): JSXElement
+export function h(tag: string, props: any, ...children: any[]): TJSXElement
 {
   return {tag, props, children};
 }
 
+type TLayoutParams = Record<string, any>;
+export type TLayout = Record<string, TLayoutParams>
 
-// Layout with optional span (flexGrow) property
-export type CKTLayoutType =
-| 'HBox'
-| 'VBox'
-| `HBox/${number}`
-| `VBox/${number}`;
-
-export type CollectionKind = 'List' | null
+export type TCollectionKind = 'List' | null
 
 // Internal system-reserved keys
-type InternalKey = 'elem' | 'item';
-export type CKTComponentName = `$${string}`;
+type TInternalKey = 'elem' | 'item';
 
-type DOMEventName = keyof HTMLElementEventMap;
+type TDOMEventName = keyof HTMLElementEventMap;
+
+export type TComponentName = `$${string}`;
 
 // Accepts 'click', 'change', etc., or 'prefix.click', 'prefix.change', etc.
-export type SignalName = DOMEventName | `${string}.${DOMEventName}`;
+export type TSignalName = TDOMEventName | `${string}.${TDOMEventName}`;
+
+export type TSignals = TSignalName[];
 
 export type SignalMap = {
-  [key in SignalName]?: any;
+  [key in TSignalName]?: any;
 }
 
-export type CKTComponentElem = {
+export type TComponentElem = {
   ref?: HTMLElement;
   props?: Partial<HTMLDivElement>;
   style?: Partial<CSSStyleDeclaration>;
-  layout?: CKTLayoutType;
-  signal?: SignalMap;
+  layout?: TLayout;
+  signals?: TSignals;
 }
 
 export type CKTCollectionElem = {
-  [K in InternalKey]?: JSXElement;
+  [K in TInternalKey]?: TJSXElement;
 }
-
 
 // Component node structure
 export type CKTComponentDef =
-& { [K in CKTComponentName]: CKTComponentDef | JSXElement; }
-& { [K in InternalKey]?: CKTComponentDef | JSXElement }
-& { kind?: CollectionKind }
-& CKTComponentElem
+& { [K in TComponentName]: CKTComponentDef | TJSXElement; }
+& { [K in TInternalKey]?: CKTComponentDef | TJSXElement }
+& { kind?: TCollectionKind }
+& TComponentElem
 
 
-// Collection component helper
-export function CKTCollectionComponent( layout: CKTLayoutType, container: CKTComponentDef, item: JSXElement | CKTComponentDef): CKTComponentDef {
-  return {
-    ...container,
-    layout,
-    item,
-    kind: 'List'
-  } as CKTComponentDef;
-}
-
-// Plain JSX wrapper helper
-export function CKTElem(layout: CKTLayoutType, elem: JSXElement): CKTComponentDef {
-  return {layout, elem};
-}
+type TLayoutHandler = (params: TLayoutParams, container: HTMLElement) => void;
+export const LayoutRegistry: Record<string, TLayoutHandler> = {};
 
 
-
-// Generic helper to apply a layout override to any component def
-export function CKTComponent<T extends CKTComponentDef>(layout: CKTLayoutType, base: T): T {
-  return { ...base, layout } as T;
-}
-
-
-// Given a list of signal names, return an object mapping each signal name to null
-export function $signal<T extends readonly SignalName[]>(...signals: T): { [K in T[number]]: null }
-{
-  const result = {} as { [K in T[number]]: null };
-  for(const sig of signals)
-  {
-    result[sig as T[number]] = null;
-  }
-  return result;
-}
-
-export type ExtractComps<T> = {
+type ExtractComps<T> = {
   // Only allow keys that start with $ and are not InternalKey
-  [K in keyof T as K extends CKTComponentName ? K : never]:
+  [K in keyof T as K extends TComponentName ? K : never]:
   T[K] extends object
   ?
     // Recursively extract components
@@ -112,11 +79,11 @@ export type ExtractComps<T> = {
     & { $$ref: HTMLElement | null; $$path: string; }
 
     // Add $$data and $$items if the component has a kind property
-    & (T[K] extends { kind?: CollectionKind } ? { $$data: any } : {})
-    & (T[K] extends { kind?: CollectionKind } ? { $$items: any } : {})
+    & (T[K] extends { kind?: TCollectionKind } ? { $$data: any } : {})
+    & (T[K] extends { kind?: TCollectionKind } ? { $$items: any } : {})
 
     // Add $$signal if the component has a signal property
-    & (T[K] extends { signal: infer S } ? { $$signal: { [K in keyof S]: string } } : {})
+    & (T[K] extends { signals: infer S } ? S extends readonly string[] ? { $$signals: Record<S[number], string> } : {} : {})
   :
     T[K];
 };
@@ -143,14 +110,14 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
       node.$$path = currentPath;
 
       // Attach $$signal and wire event listeners
-      if('signal' in child && typeof child.signal === 'object')
+      if('signals' in child && typeof child.signals === 'object')
       {
-        node.$$signal = {};
+        node.$$signals = {};
 
-        for(const signalKey in child.signal)
+        for (const signalKey of child.signals as string[])
         {
           const signalPath = `${currentPath}.${signalKey}`;
-          node.$$signal[signalKey] = signalPath;
+          node.$$signals[signalKey] = signalPath;
 
           if(node.$$ref)
           {
@@ -173,7 +140,7 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
   if((app as CKTComponentDef).kind === 'List')
   {
     let refItems = null;
-    function getItemsRef(comp: any)
+    const getItemsRef = (comp: any) : any =>
     {
       if(comp.$items) return comp.$items;
 
@@ -187,7 +154,7 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
       }
 
       return null
-    }
+    };
 
     result._items = getItemsRef(app);
   }
@@ -196,36 +163,9 @@ export function buildTree<T extends object>(app: T, sPath = '', first = true): E
 }
 
 
-function handleLayout(comp: any) {
-  const layout: CKTLayoutType = comp.layout;
-  if(layout)
-  {
-    const arrLayout = layout.split('/');
-
-    // Put the layout class into className
-    const layoutType = arrLayout.shift();
-    if(!comp.elem.props.className)
-      comp.elem.props.className = layoutType;
-    else
-      comp.elem.props.className += ` ${layoutType}`;
-
-    // TODO: Handle other layout types
-    // Handle <class>/num or <class>
-    if(arrLayout.length == 1)
-    {
-      const flexGrow = arrLayout[0];
-      if(flexGrow)
-      {
-        if(!comp.elem.props.style) comp.elem.props.style = {};
-        comp.elem.props.style.flexGrow = Number(flexGrow) | 0;
-      }
-    }
-  }
-}
 
 export function renderApp(appdef: CKTComponentDef)
 {
-
   function setProps(elem: HTMLElement, props: any)
   {
     if(props)
@@ -248,7 +188,7 @@ export function renderApp(appdef: CKTComponentDef)
     }
   }
 
-  function renderJSX(node: JSXElement): HTMLElement
+  function renderJSX(node: TJSXElement): HTMLElement
   {
     const el = document.createElement(node.tag);
     setProps(el, node.props);
@@ -286,7 +226,6 @@ export function renderApp(appdef: CKTComponentDef)
     }
 
     if(!comp.elem.props) comp.elem.props = {};
-    handleLayout(comp);
   }
 
   function renderNode(comp: any, elemParent: any, bTopLevel = false)
@@ -299,11 +238,11 @@ export function renderApp(appdef: CKTComponentDef)
     setProps(comp.ref, comp.elem.props);
     elemParent.appendChild(comp.ref);
 
-    // Delete the render-time properties
+    // Delete the render-time properties except layout
     if(!bTopLevel) delete comp.elem;  // preserve elem for the top-level component
     delete comp.props;
     delete comp.style;
-    delete comp.layout;
+    // delete comp.layout;
 
     const arrComp = Object.keys(comp).filter(k => k.startsWith('$'));
     for(const sChild of arrComp)
@@ -312,6 +251,14 @@ export function renderApp(appdef: CKTComponentDef)
       const child = comp[sChild];
       if(child.tag) comp[sChild] = {elem: child};
       renderNode(comp[sChild], comp.ref);
+    }
+
+    // All the children are rendered, apply the layout if any
+    if(comp.layout)
+    {
+      const layoutKind = Object.keys(comp.layout)[0];
+      const layoutFn = LayoutRegistry[layoutKind];
+      layoutFn(comp.layout[layoutKind], elemParent);
     }
   }
 
