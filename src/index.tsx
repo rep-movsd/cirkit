@@ -4,11 +4,8 @@ import {List} from './lib/cirkit-data.js';
 import './lib/cirkit.css';
 
 import {FlexLayout} from './lib/cirkit-layouts';
-
 import {TodoList} from './components/TodoList';
 import {TodoAdd} from './components/TodoAdd';
-
-
 
 let appdef = {
   layout: FlexLayout('VBox', [1, 2, 3]),
@@ -18,7 +15,6 @@ let appdef = {
   $title:    <div><hr/><h2>To-do List</h2><hr/></div>,
   $todoList: TodoList(),
   $todoAdd:  TodoAdd(),
-
 } satisfies CKTComponentDef;
 
 
@@ -34,7 +30,6 @@ const addTodoItem = () =>
 
 
 wire(tree.$todoAdd.$buttonAdd.$$signals.click, addTodoItem);
-
 wire(tree.$todoAdd.$buttonAdd.$$signals.click, addTodoItem);
 
 console.log(tree)
