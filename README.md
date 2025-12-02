@@ -60,10 +60,13 @@ In Cirkit, you could simply do this :
 data.count = 0;
 
 // Add a slot that updates the label
-const doUpdateUploadCount = () => app.panelCount.labelUploadCount.ref.textContent = `Upload count: ${data.count}`;
+const doUpdateUploadCount = () => app.panelCounts.labelUploadCount.ref.textContent = `Upload count: ${data.count}`;
+
+// Setup a signal for the above slot
+wire('app.updateUploadCount', doUpdateUploadCount);
 
 // Wire the button click to increment the count and emit the update signal
-wire('app.updateButton.click', () => { data.count++; emit('app.doUpdateUploadCount');});
+wire('app.updateButton.click', () => {data.count++; emit('app.updateUploadCount')});
 ```
 
 We could add this code anywhere, in any file in our code, and it would work.
