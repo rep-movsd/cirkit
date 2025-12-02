@@ -2,19 +2,21 @@
 # Cirkit Framework
 
 Cirkit is a **lightweight, component-based UI framework** for building reactive web applications using **JSX** and a **signal-slot system**. It focuses on **minimalism**, **flexibility**, and **performance**, with a declarative approach to defining **components**, **lists**, **menus**, **tabs**, and other **UI constructs**.
-
 It is currently a work in progress and will get better and more feature-rich with time.
 
+Note:
+The first version of this library used JSX for UI definition - while this looked really nice syntactically, JSX has some fundamental limitations related to type enforcement which prevent us from having nice things!
+This version ditches JSX in favor of strongly typed TS objects - this increases verbosity a bit and needs the user to follow certain rules, but in return you get a much better development experience. 
 ---
 
 ## Features
 
-- **JSX-based component tree** construction
+- **Simple dict based UI definition syntax** construction
 - **Collection components** for lists, menus, tabs, and accordions
 - **Signal-slot system** for event propagation and decoupled communication
 - **Reactive list binding** with selection support
 - **Efficient DOM updates** using direct references and minimal index lookups
-- **Simple inbuilt layout styling** using flexbox 
+- **Simple inbuilt layout styling** using flexbox
 - **No dependencies** — just clean TypeScript and vanilla JS
 
 ---
@@ -29,30 +31,81 @@ But I have also been working for far longer with native UI toolkits, all the way
 
 By the time React 18 came out, with hooks, effects and functional components as the norm (which IMHO is just classes with extra pain), I was less involved with UI development, continuing to maintain a decently large React 16 codebase for work until 2020, occasionally adding features or fixing a bug.
 
-But whenever I did any personal project with a UI, I cursed at the spaghetti code that was React, and the opaque nature of its architecture. The UI codebase that I occasionally modify at work uses AngularJS and it's certainly not simple or elegant. 
+But whenever I did any personal project with a UI, I cursed at the spaghetti code that was React, and the opaque nature of its architecture. The UI codebase that I occasionally modify at work uses AngularJS and it's certainly not simple or elegant.
 
-Facebook had a long interesting video on how they fixed phantom message notifications with React, but many years later, phantom notifications are still a thing. I put this down to the fact that the complexity of the framework's internals is so high, that it is impossible to understand all the edge cases. 
-Apparently, the only way to write React code such that you don't inadvertently cause wasteful re-rendering is to simply run the React compiler to correct the mess that you wrote - this is not a joke.
+I wanted a few things in a UI framework (each is described in detail in the following sections)
 
-There are many newer cleaner frameworks, but it's always fun to try rolling your own - so Cirkit was born - the name is a play on the word "circuit" since its all signals and slots, and the fact that it is a kit for building UIs.
+- Named component tree with IDE autocomplete and strong typing
+- Signals and slots as the event mechanism
+- Data bound components
+- Direct DOM updates 
 
-Cirkit is designed with a very narrowed expectation for web design, based on the premise that most web apps do not require the complex and hard to understand features that most popular frameworks provide. It is meant to make things as simple as needed, without sacrificing power or flexibility.
+It is certainly very opinionated and works different from what popular frameworks do, but this is what I wanted.
 
-We (meaning I and our dear friend ChatGPT) have hashed out a few opinionated ideas that guide the design of Cirkit, and followed our hearts to get what I have here.
+### Named component tree
+
+Consider native UI toolkits like QT or Delphi VCL
+
+The way you access some UI element is like `Form1.PanelTodos.ListTodos` (Delphi) or `panelMain->panelTodos->listTodos` (QT)
+You have a tree of objects which map to the UI representation - by default, everything has a name and a reference, in contrast to web frameworks where you need to explicitly add a `ref` or some `id` or `name` or custom `data-*` property to the component object or underlying DOM element.  
+
+This always felt counter-intuitive - in React for example, if you have:
+```tsx
+const comp = 
+    <Component>
+      <SubComponent>
+        // Blah blah
+      </SubComponent>
+    </Component>
+```
+
+You cant just say `comp.subcomponent.changeColor()` or something - you have to introduce extra stuff like refs
+
+Also the idea that the UI is a tree of types/classes as opposed to values is kind of upside down.
+It makes more sense that the UI is a tree of values, and those values have a type and name.  
+
+For context, let me show how I tried to achieve this with a custom JSX parser in the first iteration of this library
+```tsx
+const app = 
+<app class='VBox app'>
+  <todos class='vscroll' trait='list' bind={data.todos} tag='ul' span={20}
+         style={{border: "1px solid black", "list-style-position": "inside"}}>
+    <item-template tag={'li'} text={setProp('innerText')}/>
+  </todos>
+  <todoAdd class='HBox' span={1}>
+    <todoInput tag='input' placeholder='Enter item to add' span={1} signals={['keypress']} />
+  </todoAdd>
+</app>
+```
+
+The building blocks are names not types.
+Behaviour is attached in whatever way you prefer - you dont need to write a function or class for every block in the UI. 
+
+The JSX approach was not up to spec because JSX works like a preprocessor step - JSX gets transformed into function calls which can return anything.
+However the TS compiler and language server cannot reason the shape of the object perfectly - in theory they should but JSX was invented before TS and the "generated code" is plain vanilla JS with no type information.
+
+An object generated by the above JSX with a custom parser will be a generic JS object and the IDE and compiler cannot do type checking or autocomplete.
+For example I could write `app.todos.foobar` and it would not be flagged as an error until we ran it.
+I am not a TypeScript expert, but I believe that its pretty much impossible to do what I needed with JSX - the `app` object above cannot be reflected at compile-time
+
+Getting back to the main point
+
+I want to be able to access the UI elements by name, and those will refer to strongly typed wrappers around their DOM elements and associated data.
+
 
 ### Signals and Slots
 
-Signals and Slots (not to be confused with Javascript signals which now exist as various flavors in Angular, Solid etc.) are an inherently more flexible and sensible paradigm than other forms of event handling. 
-This is because they allow a sender and receiver of a signal, well as the central dispatcher to be totally agnostic of one another. 
+Signals and Slots (not to be confused with Javascript signals which now exist as various flavors in Angular, SolidJS etc.) are an inherently more flexible and sensible paradigm than other forms of event handling.
+This is because they allow a sender and receiver of a signal, well as the central dispatcher to be totally agnostic of one another.
 The QT framework has been using this paradigm for decades, and it is a very powerful and flexible way to deal with events, both for UIs and for other reactive systems.
 For those that may not know, KDE is almost entirely based on QT
 
 Lets consider a simple example that shows how much simple it is to program with signals and slots.
 
-Suppose we had an existing app with an "Upload" button. 
+Suppose we had an existing app with an "Upload" button.
 Now, assume that we needed to add a UI element, that shows how many times that button was clicked.
-In most frameworks, you would have to either add a new event handler to the button or its parent, or change the existing event handler to also update the new UI element. 
-Even with JS signals, you'd still need some way to make the button click handler update a count that you would have to include in its scope. 
+In most frameworks, you would have to either add a new event handler to the button or its parent, or change the existing event handler to also update the new UI element.
+Even with JS signals, you'd still need some way to make the button click handler update a count that you would have to include in its scope.
 
 In Cirkit, you could simply do this :
 ```ts
@@ -63,10 +116,10 @@ data.count = 0;
 const doUpdateUploadCount = () => app.panelCounts.labelUploadCount.ref.textContent = `Upload count: ${data.count}`;
 
 // Setup a signal for the above slot
-wire('app.updateUploadCount', doUpdateUploadCount);
+wire(app.updateUploadCount, doUpdateUploadCount);
 
 // Wire the button click to increment the count and emit the update signal
-wire('app.updateButton.click', () => {data.count++; emit('app.updateUploadCount')});
+wire(app.updateButton.click, () => {data.count++; emit(app.updateUploadCount)});
 ```
 
 We could add this code anywhere, in any file in our code, and it would work.
@@ -74,75 +127,161 @@ The button doesn't need to know about the count, and the count doesn't need to k
 
 With signals and slots, every event is "broadcast" and any entity can listen to it and take appropriate action.
 
-Cirkit emphasizes signals and slots as the control mechanism. 
+Cirkit emphasizes signals and slots as the control mechanism.
 - Signals have arbitrary names and contain arbitrary data and are wired to one or more Slots.
 - Slots are simply functions that receive the data and the signal name.
 - Signals can also be wired to other Signals to create a chain of events and they can be sent from any code including slots via the `emit()` function.
 
-Another major advantage of using signals and slots, is that it is possible to use them to completely automate all user interactions to your application. 
+Another major advantage of using signals and slots, is that it is possible to use them to completely automate all user interactions to your application.
 It would be fairly simple to do things like macro recording and replay, or even to make end to end automated UI tests as part of your app itself.
+The entire state of the app (including derived and computed) could be serialized as a list of signals and their data and sending them one by one will restore the state exactly.
 
+Signals are identified by the UI tree path - the IDE will autocomplete signal names (based on what signals the component exposes)
+The framework can automatically expose DOM events as signals - for example:
 
-### JSX and UI Design
+```
+  $buttonAdd: {
+    elem: <button>Insert To-do</button>,
+    signals: ['click', 'hover']
+  }
+```
 
-JSX is a very powerful way to define UI, but tends to be overcomplicated in popular frameworks, who have also biased the perception of how to use it.
+Here the button will emit the click and hover signals when the DOM event happens.
 
-For Cirkit we think of JSX as a way to model the UI layout rather than a way to embed UI, logic and code in one.
+Let's look at the UI syntax we use next 
 
-- We treat the UI as a series of nested boxes, much like a desktop application
-- Some of those boxes are homogenous collections of some other type of box, and these are almost always dynamic (items are added, removed etc.)
-- 99% of UIs can be built with horizontal and vertical packing of boxes with proportional and fixed sizing
-- We rarely need to manipulate the DOM by inserting and deleting elements, unless it is a collection of items that are dynamic
+### UI definition 
+
+We have foregone JSX in this iteration of the library, so we now use a simple JS object definition syntax
+
+Let's look at the basic assumptions we start with:
+
+- UI consists of a bunch of nested/overlapped boxes of heterogeneous nature, which we can term Containers
+- Some of these boxes contain multiple boxes of the same type, one or more of which are "Active", which we can term Collections
+- Its unlikely that you have any UI where the structure itself changes (as opposed to layout or hiding/showing things)
+
+UI changes are typically:
+- Some container is hidden, shown or updated with new content/style
+- Some collections underlying data changes - items are added/removed/permuted
+- Some collections item or items are "selected" or "activated" 
+
+This captures almost all UI paradigms
+- Layout and content panes are static Containers
+- Lists, Menus, Tabviews, Carousels and so on are Collections with various ways of indicating the "active" state
+
+Containers are almost always data driven - they render a list of uniform data records from some source - typically JSON from an API 
+
+Given these reasonable assumptions, the whole virtual DOM diffing approach like React does seems like overkill.
+You really dont need to diff two forests to figure out what to change and end up having to write a compiler to fix the developers mistakes.
+I know the functional, declarative approach is highly educational, but a browser page is a mutable object with a finite set of visible things. 
+You mutate them... you don't pretend to rerender everything from scratch and internally mutate things to optimize.
+
+You dont need ridiculous patterns like an `<input>` element that sets an external state in onChange, which triggers it to rerender, but React checks that it exists and mutates its `value` property so you can see what was typed!
+The plain <input> would have worked just fine without any React code!
+
+Coming back to design decisions, we streamline the way Collection components work, by using an ancient and powerful technique - Data binding.
+Collection components will be bound to some sort of data handling object - for now we have a TList<TItem>, you could have TSet, TMap, and so on
+The UI definition will bind such a list to a collection component - when bound, manipulating the TList with add(), del() etc. will automagically update the underlying element. 
+Of course the user needs to specify how an item of type TItem should mutate the underlying DOM for an item onscreen.
+This is gracefully done with signals and slots.
+
+The data object emits signals with the changes, and the UI part has bound those to slots which update the content 
+
 
 Let's get into some of the details in the following section using an example
 
-### A simple TODO list 
+### A simple TODO list
 
-Here is the entire code for a todo list which adds entries to a list when you type something into the input field and press **Enter** 
+Here is the UI definition for a todo list app which adds entries to a list when you type something into the input field and press **Enter**
 
 ```tsx
-import {ComponentMap, h, plantDOMTree, setProp, setStyle, List, wire, emit} from './lib/cirkit.js';
+let app = {
+  layout: FlexLayout('VBox', [1, 2, 3]),
+  props: {className: 'app'},
+  style: {borderStyle: 'solid', borderWidth: '1px', borderColor: 'black', padding: '5px'},
 
-type TodoItem = { text: string };
-export const data = { todos: new List<TodoItem>('todos')}
-
-const root: ComponentMap =
-<app class='VBox app'>
-  <todos class='vscroll' trait='list' bind={data.todos} tag='ul' span={20}
-         style={{border: "1px solid black", "list-style-position": "inside"}}>
-    <item-template tag={'li'} text={setProp('innerText')}/>
-  </todos>
-  <todoAdd class='HBox' span={1}>
-    <todoInput tag='input' placeholder='Enter item to add' span={1} signals={['keypress']} />
-  </todoAdd>
-</app>
-
-const app = plantDOMTree(root, document.body);
-
-// Slot to add a to-do item to the list from the input
-const doAddTodo = function() {
-  const elemInput = app.todoAdd.todoInput.ref;
-  if(elemInput.value) {
-    data.todos.add({text: elemInput.value});
-    elemInput.value = '';
-  }
-}
-
-// Add a signal to connect to the above slot - ideally we dont call slot functions, instead emit a signal tied to them
-wire('app.addTodo', doAddTodo);
-
-// Wire up Enter keypress on the input to add an item
-wire('app.todoAdd.todoInput.keypress', (evt: any) => evt.key === 'Enter' && emit('app.addTodo'));
+  $title: <div><hr/><h2>To-do List</h2><hr/></div>,
+  $todoList: TodoList(),
+  $todoAdd:  TodoAdd(),
+} satisfies TComponentDef;
 ```
 
-I dare say it looks pretty simple and grokkable
+An appdef is a component which is a dictionary with some fixed keys and subcomponents whose keys begin with $
+This is to ensure that when we type `app.` we get the subcomponents as the first entries in the autocomplete
+JS has only the `$` and `_` as valid symbols for identifiers so this looks best.
+
+The `props` key sets the HTML DOM attributes and `style` specifies the CSS
+Subcomponents are either another component or they are a regular HTML tag defined in plain JSX 
+When rendered, each component has a corresponding DOM element which is a div by default
+
+Types are all prefixed by T in this library a la Delphi.
+The key to strong type checking here is the `satisfies TComponentDef` clause - this makes sure you can only use the predefined properties, and only use names starting with $ and only provide the correct type of value under each key.
+The moment you type anything out of spec, the compiler or IDE will complain.
+Unfortunately AFAIK, we cannot get rid of this clause using a wrapper or something - it needs to be "typed" out (pun intended).
+
+Notice that $todoList, $todoAdd and layout are initialized with a function - each of these functions is nothing magical, they simply return a plain object.
+This is simply a simple way to separate out reusable components - you can very well write the literal values into the original appdef.
+
+lets look at the definitions
+
+```tsx
+export function TodoAdd() {
+  return {
+    // Input box
+    $todoInput:  {
+      elem: <input placeholder='Enter item'/>,
+      signals: ['keypress', 'change'],
+    },
+
+    // Button to add item
+    $buttonAdd: {
+      elem: <button>Insert To-do</button>,
+      signals: ['click', 'change'],
+    },
+  } satisfies TComponentDef;
+}
+```
+
+The `elem` key specifies what kind of DOM element to use
+The `signals` key specifies what DOM events will be broadcast as signals 
+
+```tsx
+export function TodoList() {
+  return {
+    layout: FlexLayout('VBox', [1,1,5]),
+    $frame: {
+
+      $title: <div>List component</div>,
+
+      // Button to sort
+      $buttonSort:
+      {
+        //layout: 'HBox/1',
+        elem: <button>SORT</button>,
+        signals: ['click'],
+      },
+
+      $items: <ul/>
+    },
+  } satisfies TComponentDef;
+}
+```
+
+This TodoList is 
+
+
 
 ---
+
+
+
+
+
 
 Let's look at each section of the code briefly, and explore things in more detail in the next section
 
 #### Data Model
-Cirkit uses the concept of a central data store, typically called **data** to store all the state that the UI needs. 
+Cirkit uses the concept of a central data store, typically called **data** to store all the state that the UI needs.
 This is a simple dict that can contain any data you wish.
 
 ```ts
@@ -150,7 +289,7 @@ type TodoItem = { text: string };
 export const data = { todos: new List<TodoItem>('todos') };
 ```
 Here we define a list of text todo items that we want to display in the UI.
-Each List mush have a unique name, in this case `'todos'` and also be stored in the data object under the same key. 
+Each List mush have a unique name, in this case `'todos'` and also be stored in the data object under the same key.
 This convention simplifies the code that binds the data to the UI.
 
 ---
@@ -174,7 +313,7 @@ const root: ComponentMap =
 const app = plantDOMTree(root, document.body);
 ```
 
-The component map is then passed to the `plantDOMTree` function, which creates the actual DOM elements and attaches them to the document body. 
+The component map is then passed to the `plantDOMTree` function, which creates the actual DOM elements and attaches them to the document body.
 During the process, it adds several properties to the component map, including `ref` which is a reference to the actual DOM element corresponding to a component in the tree
 
 ---
@@ -192,7 +331,7 @@ function addTodo() {
 ```
 
 Notice two things here:
-- We can access the input element as a dotted path in the app object as `app.todoAdd.todoInput.ref` 
+- We can access the input element as a dotted path in the app object as `app.todoAdd.todoInput.ref`
 - The `data.todos` list is modified directly, and the UI is automagically updated to reflect the change
 
 ---
@@ -211,7 +350,7 @@ Even if a slot function could be called directly, it is better to emit a signal 
 Here we wire a signal `app.addTodo` to the slot function that adds the item to the list.
 We also wire the keypress event of the input field to emit that signal when the Enter key is pressed.
 
-Cirkit automatically sets up event handlers for the DOM events specified in the `signals` array property of a component - in this case we had `signals={['keypress']}` so a keypress event handler was added that would emit the signal `'app.todoAdd.todoInput.keypress'` 
+Cirkit automatically sets up event handlers for the DOM events specified in the `signals` array property of a component - in this case we had `signals={['keypress']}` so a keypress event handler was added that would emit the signal `'app.todoAdd.todoInput.keypress'`
 
 
 ## Diving a bit deeper
@@ -267,7 +406,7 @@ We have added a color selection box to the above example - notice that this colo
 We can access the Nth `<li>` element in `todos` as `app.todos.refs[N]`
 For the colors component, since it is nested, we can access the elements of the Nth color component as `app.colors.refs[n].box.ref` and `app.colors.refs[n].box.boxColor.ref`
 
-Unlike most frameworks, you don't need to explicitly maintain refs to parts of your UI DOM with Cirkit. Since all components are named and have a path, you can access them directly from the app object. 
+Unlike most frameworks, you don't need to explicitly maintain refs to parts of your UI DOM with Cirkit. Since all components are named and have a path, you can access them directly from the app object.
 
 Note that the `<item-template>` and `<tag>` elements are placeholders and do not get rendered in the DOM. They are only a convenience to specify the structure of the collection items.
 For cleaner syntax, the "tag" property of a component can be specified via property syntax as `<item-template tag={'li'} ... />` or as a nested tag element `<item-template><tag> ... </tag></item-template>` if dealing with nested components
@@ -280,18 +419,18 @@ For collection components, calling add/set methods on the bound List object will
 
 In this example - each todo item has text and color key and corresponding properties in the `<item-template>` element for the todos collection.
 These properties are assigned to setColor and setText - these are factories that generate updator functions:
-  - `setStyle('color')` returns a lambda like `(ref, value) => ref.style['color'] = value`
-  - `setProp('innerText')` returns a lambda like `(ref, value) => ref.innerText = value`
+- `setStyle('color')` returns a lambda like `(ref, value) => ref.style['color'] = value`
+- `setProp('innerText')` returns a lambda like `(ref, value) => ref.innerText = value`
 
 When the data object is updated, the corresponding function is called with the ref and the value to update the DOM element.
 
-Cirkit predefines a few DOM updaters 
-  - setProp - sets a property of the DOM element
-  - setClass - sets or removes a class for the DOM element
-  - setAttr - sets an attribute of the DOM element (for example `disabled`)
-  - setStyle - sets some property on the element style
+Cirkit predefines a few DOM updaters
+- setProp - sets a property of the DOM element
+- setClass - sets or removes a class for the DOM element
+- setAttr - sets an attribute of the DOM element (for example `disabled`)
+- setStyle - sets some property on the element style
 
-Notice that for <colors> we have a nested structure, and the color is set on the innermost div element. 
+Notice that for <colors> we have a nested structure, and the color is set on the innermost div element.
 We specify the nested reference like `color={setStyle('box.boxColor.backgroundColor')}` which returns a lambda that modifies the nested element.
 
 As of now this system only works for collection elements - eventually we will allow any component to be mapped to a data object and have its properties updated in a similar way.
@@ -302,7 +441,7 @@ This updater is called twice - once to deselect the existing selection if any, a
 
 ### Event handling and signals for collections
 
-Traditionally there are two ways to handle events in a list 
+Traditionally there are two ways to handle events in a list
 - Attach a handler (for example click) to each item in the list
 - Attach a single handler to the list itself and detect which item was clicked
 
@@ -313,13 +452,13 @@ There are two basic and obvious ways to handle this
 - Attach an index to each item in the list - but this would need to be updated for all elements whenever the list changes
 - Use `Array.indexof` on the parent element and its DOM children[] array - this is slow as well
 
-However we can do better - we can store an array of references to the DOM elements in the collection component itself, and use the `Array.indexOf` method on this array to get the index of the element that was clicked. Since this is a JS array, it is very fast, and the memory overhead is minimal. 
+However we can do better - we can store an array of references to the DOM elements in the collection component itself, and use the `Array.indexOf` method on this array to get the index of the element that was clicked. Since this is a JS array, it is very fast, and the memory overhead is minimal.
 
 In ths JSX above the `signals` property in both the collection components have the prefix `'item.'` which sets up an event handler to listen for events on the collection items and send a signal with the index of the item in it.
 
 ---
 
-### Building 
+### Building
 
 There is no complex build or packaging system for Cirkit - it is a single file that can be included in your project.
 
